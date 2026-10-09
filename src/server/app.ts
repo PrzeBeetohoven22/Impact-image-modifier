@@ -65,9 +65,35 @@ type Session = {
   oauth?: { state: string; verifier: string; created: number };
   canva: CanvaService;
 };
+function isCodespacesProxyOrigin(req: Request, enabled: boolean, port: string) {
+  // Codespaces can rewrite Origin to the local upstream. Sec-Fetch-Site is
+  // supplied by the browser and cannot be set by page JavaScript. Accept this
+  // rewrite only for same-origin browser requests to this server's loopback port.
+  if (
+    !enabled ||
+    req.headers["sec-fetch-site"] !== "same-origin" ||
+    !req.headers.origin
+  )
+    return false;
+  try {
+    const origin = new URL(req.headers.origin);
+    return (
+      ["http:", "https:"].includes(origin.protocol) &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname) &&
+      origin.port === port &&
+      origin.origin === req.headers.origin
+    );
+  } catch {
+    return false;
+  }
+}
 export function createApp(options: AppOptions = {}) {
   const app = express(),
     sessions = new Map<string, Session>();
+  const publicOrigin = process.env.APP_ORIGIN,
+    isCodespaces =
+      process.env.CODESPACES === "true" && Boolean(process.env.CODESPACE_NAME),
+    serverPort = String(Number(process.env.PORT ?? 3001));
   const analysis =
     options.analysis ??
     new LocalSubjectAnalysis(
@@ -108,9 +134,16 @@ export function createApp(options: AppOptions = {}) {
   );
   app.use("/api", (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
-    if (!["GET", "HEAD"].includes(req.method) && req.headers.origin) {
-      const allowed = process.env.APP_ORIGIN ?? `http://${req.headers.host}`;
-      if (req.headers.origin !== allowed)
+    if (!["GET", "HEAD"].includes(req.method)) {
+      const allowed = publicOrigin ?? `http://${req.headers.host}`,
+        site = req.headers["sec-fetch-site"],
+        origin = req.headers.origin;
+      if (
+        (site && site !== "same-origin" && site !== "none") ||
+        (origin &&
+          origin !== allowed &&
+          !isCodespacesProxyOrigin(req, isCodespaces, serverPort))
+      )
         return next(
           new AppError(
             "ORIGIN_REJECTED",
@@ -141,7 +174,7 @@ export function createApp(options: AppOptions = {}) {
         signed: true,
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.APP_ORIGIN?.startsWith("https:") ?? false,
+        secure: publicOrigin?.startsWith("https:") ?? false,
         maxAge: ttl,
         path: "/",
       });

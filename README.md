@@ -16,6 +16,16 @@ Najprostsza ścieżka pierwszych testów w przeglądarce: **GitHub Codespaces**,
 
 [Instrukcja PDF](docs/PIERWSZE-URUCHOMIENIE.pdf) zawiera szczegółowe kroki i pomoc. Gdy repozytorium zawiera już pliki aplikacji, pomiń w niej kroki 1–2 i zacznij od **kroku 3: Utwórz środowisko Codespaces**. Kopię kodu pobierzesz z GitHub przez **Code → Download ZIP**.
 
+**Aktualizacja działającej sesji Codespaces:** w terminalu aplikacji naciśnij **Control + C**, a następnie wykonaj:
+
+```sh
+git pull --ff-only origin main && npm run build && bash .devcontainer/start.sh
+```
+
+Po ponownym uruchomieniu odśwież kartę aplikacji i wybierz zdjęcie jeszcze raz. Restart usuwa bieżące zadania. Pobranie zmian jest bezpieczne dla lokalnych edycji: jeśli Git zgłosi konflikt, zatrzymaj się i sprawdź komunikat.
+
+Proxy Codespaces może zmienić nagłówek Origin na lokalny adres serwera. Aplikacja dopuszcza tę zmianę wyłącznie w Codespaces, dla żądań przeglądarki oznaczonych `Sec-Fetch-Site: same-origin` i lokalnego portu tej aplikacji. Obce strony, inne porty i nagłówki `X-Forwarded-Host` nie uprawniają do obejścia kontroli.
+
 ## Uruchomienie
 
 W katalogu tego repozytorium użyj Node **24** i npm **11**:

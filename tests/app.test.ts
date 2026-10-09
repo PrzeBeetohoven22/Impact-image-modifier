@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/server/app";
 import {
@@ -12,6 +12,75 @@ const instances: ReturnType<typeof createApp>[] = [];
 afterEach(() => {
   for (const i of instances) i.close();
   instances.length = 0;
+  vi.unstubAllEnvs();
+});
+
+describe("Codespaces forwarded browser requests", () => {
+  function codespaces() {
+    vi.stubEnv("CODESPACES", "true");
+    vi.stubEnv("CODESPACE_NAME", "test-space");
+    vi.stubEnv("PORT", "3001");
+    vi.stubEnv("APP_ORIGIN", "https://test-space-3001.app.github.dev");
+  }
+
+  it.each(["http://localhost:3001", "http://127.0.0.1:3001"])(
+    "accepts a same-origin browser upload forwarded with Origin %s",
+    async (origin) => {
+      codespaces();
+      const i = createApp({
+        defaultGradient: await gradientFixture(),
+        analysis: {
+          analyze: async () => ({ people: 1, faces: [face], warnings: [] }),
+        },
+      });
+      instances.push(i);
+      const result = await request(i.app)
+        .post("/api/jobs")
+        .set("Origin", origin)
+        .set("Sec-Fetch-Site", "same-origin")
+        .field("name", "Forwarded speaker")
+        .field("mode", "transparent")
+        .attach("photo", await subjectFixture(), {
+          filename: "speaker.png",
+          contentType: "image/png",
+        })
+        .expect(202);
+      expect(result.body.id).toBeTruthy();
+      expect(result.headers["set-cookie"][0]).toContain("Secure");
+    },
+  );
+
+  it("rejects external origins, cross-site requests and unrelated loopback ports", async () => {
+    codespaces();
+    const { i } = setup();
+    for (const [origin, site] of [
+      ["https://evil.example", "same-origin"],
+      ["http://localhost:3001", "cross-site"],
+      ["http://localhost:3001", "same-site"],
+      ["http://localhost:3001", undefined],
+      ["http://localhost:5173", "same-origin"],
+      ["https://test-space-3001.app.github.dev", "cross-site"],
+    ]) {
+      const r = request(i.app)
+        .post("/api/gradient")
+        .set("Origin", origin!)
+        .set("X-Forwarded-Host", "test-space-3001.app.github.dev");
+      if (site) r.set("Sec-Fetch-Site", site);
+      const response = await r.expect(403);
+      expect(response.body.code).toBe("ORIGIN_REJECTED");
+    }
+  });
+
+  it("keeps the explicit origin check outside Codespaces", async () => {
+    codespaces();
+    vi.stubEnv("CODESPACES", "false");
+    const { client } = setup();
+    await client
+      .post("/api/gradient")
+      .set("Origin", "http://localhost:3001")
+      .set("Sec-Fetch-Site", "same-origin")
+      .expect(403);
+  });
 });
 function setup(people = 1) {
   const i = createApp({

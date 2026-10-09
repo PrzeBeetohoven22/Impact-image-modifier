@@ -181,7 +181,7 @@ README.md
             <tr><td>„Najpierw wykonaj…” albo brak folderu <code>dist</code></td><td>W terminalu wykonaj <code>bash .devcontainer/setup.sh</code>. Po zakończeniu ponownie uruchom komendę z kroku 4.</td></tr>
             <tr><td>Błąd „Wymagany Node.js 24”</td><td>Sprawdź pliki <code>.devcontainer</code>. Po ich uzupełnieniu otwórz paletę poleceń przez <strong>F1</strong> i wybierz <strong>Codespaces: Rebuild Container</strong>.</td></tr>
             <tr><td>Port 3001 nie otwiera strony</td><td>Sprawdź komunikat uruchomienia w terminalu. W panelu Ports protokół powinien być <strong>HTTP</strong>; zewnętrzny URL GitHub i tak używa HTTPS. Otwórz stronę ponownie przez ikonę globusa.</td></tr>
-            <tr><td>„Żądanie z niedozwolonej strony”</td><td>Użyj adresu skopiowanego z Ports dla portu 3001. Zatrzymaj aplikację w terminalu skrótem <strong>Ctrl + C</strong> i uruchom ją ponownie komendą z kroku 4.</td></tr>
+            <tr><td>„Żądanie z niedozwolonej strony”</td><td>Otwórz adres z Ports dla portu 3001. W terminalu aplikacji naciśnij <strong>Control + C</strong>, a potem wykonaj <code>git pull --ff-only origin main &amp;&amp; npm run build &amp;&amp; bash .devcontainer/start.sh</code>. Po uruchomieniu odśwież kartę aplikacji i ponownie wybierz zdjęcie. Jeśli Git zgłosi konflikt, zatrzymaj się i podaj komunikat.</td></tr>
             <tr><td>„Address already in use” / <code>EADDRINUSE</code></td><td>Aplikacja prawdopodobnie już działa. Otwórz port 3001. Jeśli trzeba ją zrestartować, użyj Ctrl + C w terminalu, w którym ją uruchomiono.</td></tr>
             <tr><td>Podgląd zniknął lub zadanie wygasło</td><td>Wgraj zdjęcie ponownie. Wynik nie jest przechowywany jako historia.</td></tr>
           </tbody>
@@ -190,7 +190,7 @@ README.md
       </section>
 
       <footer>
-        <p>Przygotowano 8 października 2026. To instrukcja prywatnych testów; URL działa podczas uruchomionej sesji Codespaces. Nie wymaga publikowania środowiska Codex. Paczka zawiera kod aplikacji i konfigurację; nie zawiera zdjęć testowych ani sekretów.</p>
+        <p>Przygotowano 8 października 2026; aktualizacja 9 października 2026. To instrukcja prywatnych testów; URL działa podczas uruchomionej sesji Codespaces. Nie wymaga publikowania środowiska Codex. Paczka zawiera kod aplikacji i konfigurację; nie zawiera zdjęć testowych ani sekretów.</p>
         <p>Sprawdzono oficjalne instrukcje GitHub: <a href="https://docs.github.com/en/repositories/working-with-files/managing-files/adding-a-file-to-a-repository">upload plików</a>, <a href="https://docs.github.com/en/codespaces/developing-in-a-codespace/creating-a-codespace-for-a-repository">tworzenie Codespaces</a>, <a href="https://docs.github.com/en/codespaces/developing-in-a-codespace/forwarding-ports-in-your-codespace">podgląd portu</a>, <a href="https://docs.github.com/en/codespaces/developing-in-a-codespace/stopping-and-starting-a-codespace">zatrzymanie i wznowienie</a>. Nazwy przycisków mogą nieznacznie różnić się zależnie od wersji GitHub. Faktyczna sesja Codespaces na Twoim koncie nie została utworzona przez tę instrukcję.</p>
       </footer>
     </main>
