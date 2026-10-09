@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { access } from "node:fs/promises";
-import { resolve, dirname, basename } from "node:path";
+import { resolve } from "node:path";
+import { NativeModelProcess } from "./native-process.js";
 import type { DetectedObject, ObjectReport } from "../shared/config.js";
 
 export const OBJECT_MODEL_PATH = resolve(
@@ -9,16 +10,8 @@ export const OBJECT_MODEL_PATH = resolve(
 export const OBJECT_MODEL_REVISION = "b75f4e52949639c3bb0b96546ea4149482f6e7ef";
 export interface ObjectDetectionProvider {
   detect(subject: Buffer, known: DetectedObject[]): Promise<ObjectReport>;
+  close?(): void;
 }
-const labels: Record<string, string> = {
-  "a microphone": "mikrofon",
-  "a microphone stand": "statyw mikrofonu",
-  "a laptop computer": "laptop",
-  "a mobile phone": "telefon",
-  "a podium": "mównica",
-  "a bottle": "butelka",
-  "a chair": "krzesło",
-};
 const fallbackLabels: Record<string, string> = {
   laptop: "laptop",
   "cell phone": "telefon",
@@ -55,8 +48,10 @@ export async function retainedObjects(
 
 export class LocalObjectDetection implements ObjectDetectionProvider {
   constructor(private modelPath = OBJECT_MODEL_PATH) {}
-  private detector?: import("@huggingface/transformers").ZeroShotObjectDetectionPipeline;
-  private unavailable = false;
+  private worker = new NativeModelProcess("objects");
+  close() {
+    this.worker.close();
+  }
   async detect(
     subject: Buffer,
     known: DetectedObject[],
@@ -68,60 +63,8 @@ export class LocalObjectDetection implements ObjectDetectionProvider {
         .map((o) => ({ ...o, label: fallbackLabels[o.label] })),
     );
     try {
-      if (this.unavailable) throw new Error("Local object model unavailable");
       await access(resolve(this.modelPath, "onnx/model_quantized.onnx"));
-      const { env, pipeline, RawImage } =
-        await import("@huggingface/transformers");
-      // No photo, telemetry or model request leaves the application at runtime.
-      env.allowRemoteModels = false;
-      env.allowLocalModels = true;
-      env.localModelPath = dirname(resolve(this.modelPath)) + "/";
-      this.detector ??= await pipeline<"zero-shot-object-detection">(
-        "zero-shot-object-detection",
-        basename(this.modelPath),
-        {
-          device: "cpu",
-          dtype: "q8",
-          local_files_only: true,
-          session_options: { intraOpNumThreads: 2 },
-        },
-      );
-      const original = await sharp(subject).metadata();
-      const { data, info } = await sharp(subject)
-        .flatten({ background: "#ffffff" })
-        .resize({
-          width: 1000,
-          height: 1000,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .removeAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-      const predictions = await this.detector(
-        new RawImage(new Uint8Array(data), info.width, info.height, 3),
-        Object.keys(labels),
-        { threshold: 0.15, top_k: 6 },
-      );
-      const objects = (
-        predictions as {
-          label: string;
-          score: number;
-          box: { xmin: number; ymin: number; xmax: number; ymax: number };
-        }[]
-      )
-        .map((p) => ({
-          label: labels[p.label],
-          confidence: p.score,
-          box: {
-            x: (p.box.xmin * original.width!) / info.width,
-            y: (p.box.ymin * original.height!) / info.height,
-            width: ((p.box.xmax - p.box.xmin) * original.width!) / info.width,
-            height:
-              ((p.box.ymax - p.box.ymin) * original.height!) / info.height,
-          },
-        }))
-        .filter((p) => p.label && p.box.width > 0 && p.box.height > 0);
+      const objects = await this.worker.run(subject, this.modelPath);
       const retained = await retainedObjects(subject, objects);
       return {
         status: "complete",
@@ -131,12 +74,11 @@ export class LocalObjectDetection implements ObjectDetectionProvider {
         ],
       };
     } catch {
-      this.unavailable = true;
       return {
         status: "limited",
         objects: fallback,
         message:
-          "Rozszerzone wykrywanie obiektów nie jest dostępne w tej sesji. Wykrywanie podstawowych przedmiotów pozostaje aktywne.",
+          "Rozszerzone wykrywanie obiektów nie jest dostępne dla tego zdjęcia. Możesz pobrać PNG; wykrywanie podstawowych przedmiotów pozostaje aktywne.",
       };
     }
   }

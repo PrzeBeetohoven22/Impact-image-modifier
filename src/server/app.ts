@@ -633,6 +633,8 @@ export function createApp(options: AppOptions = {}) {
     app,
     close: () => {
       clearInterval(cleanup);
+      background.close?.();
+      objects.close?.();
       for (const s of sessions.values())
         for (const j of s.jobs.values()) j.cancelled = true;
       sessions.clear();

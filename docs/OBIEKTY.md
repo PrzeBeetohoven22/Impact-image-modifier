@@ -13,6 +13,8 @@ Pod nim widnieją możliwe obiekty, informacja o braku wykonywania retuszu oraz 
 1. Wbudowany Human / CenterNet rozpoznaje podstawowe przedmioty, m.in. laptop, telefon i butelkę. Przedmioty całkowicie usunięte razem z tłem są odrzucane. Biżuteria i ubranie nie są traktowane jako zbędny obiekt. Ten model **nie ma klasy mikrofon**.
 2. Dodatkowy **OWL-ViT w ONNX, q8, CPU**, przez Transformers.js 3.8.1, rozpoznaje po opisach mikrofon, statyw mikrofonu, laptop, telefon, mównicę, butelkę i krzesło. Działa na lokalnej wyciętej sylwetce na białym tle, bez zapytań sieciowych. Próg 0.15 wymaga kalibracji na rzeczywistych zdjęciach; wynik modelu nie jest gwarancją wykrycia wszystkich mikrofonów.
 
+ISNet i OWL-ViT działają w osobnych procesach systemowych. Obie paczki wymagają innych wersji natywnego ONNX; ładowanie ich razem powodowało odtworzoną awarię `Segmentation fault` przy drugim zdjęciu. Rozdzielenie procesów usuwa ten konflikt. Procesy startują automatycznie, a zdjęcia są przekazywane w pamięci. Awaria albo przekroczenie 120 sekund w dodatkowym modelu daje status ograniczonej detekcji i pozwala pobrać PNG; następne zdjęcie ponownie uruchamia model. Awaria usuwania tła daje błąd bieżącego zdjęcia, zachowując działanie serwera.
+
 ## Instalacja w Codespaces
 
 Przy aktualizacji zatrzymaj aplikację przez Control+C i wykonaj:

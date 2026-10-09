@@ -4,41 +4,26 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import type { Analysis } from "../shared/config.js";
 import { AppError } from "./errors.js";
-import { applyAlphaMask } from "./images.js";
+import { NativeModelProcess } from "./native-process.js";
 export interface BackgroundRemovalProvider {
   remove(image: Buffer): Promise<Buffer>;
+  close?(): void;
 }
 export interface SubjectAnalysisProvider {
   analyze(image: Buffer): Promise<Analysis>;
 }
 export class LocalBackgroundRemoval implements BackgroundRemovalProvider {
+  private worker = new NativeModelProcess("background");
+  close() {
+    this.worker.close();
+  }
   async remove(image: Buffer) {
     try {
-      const { removeBackground } =
-        await import("@imgly/background-removal-node");
-      const input = await sharp(image)
-        .resize({
-          width: 3200,
-          height: 3200,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .png()
-        .toBuffer();
-      const blob = await removeBackground(
-        new Blob([new Uint8Array(input)], { type: "image/png" }),
-        {
-          model: "medium",
-          debug: false,
-          output: { format: "image/png", quality: 1 },
-        },
-      );
-      const result = Buffer.from(await blob.arrayBuffer());
-      return applyAlphaMask(image, result);
+      return await this.worker.run(image);
     } catch {
       throw new AppError(
         "BACKGROUND_REMOVAL_FAILED",
-        "Usunięcie tła nie powiodło się. Spróbuj innego zdjęcia lub wgraj wyciętą sylwetkę PNG.",
+        "Usunięcie tła nie powiodło się. Spróbuj ponownie lub wgraj wyciętą sylwetkę PNG.",
         503,
       );
     }

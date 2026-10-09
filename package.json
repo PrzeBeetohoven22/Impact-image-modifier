@@ -16,6 +16,7 @@
     "check:models": "tsx scripts/check-models.ts",
     "setup:objects": "tsx scripts/setup-objects.ts",
     "check:objects": "tsx scripts/check-objects.ts",
+    "check:pipeline": "tsx scripts/check-pipeline.ts",
     "canva:poc": "tsx scripts/canva-poc.ts",
     "test:browser": "playwright test"
   },

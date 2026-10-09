@@ -24,6 +24,14 @@ git pull --ff-only origin main && bash .devcontainer/setup.sh && bash .devcontai
 
 Po ponownym uruchomieniu odśwież kartę aplikacji i wybierz zdjęcie jeszcze raz. Restart usuwa bieżące zadania. Pobranie zmian jest bezpieczne dla lokalnych edycji: jeśli Git zgłosi konflikt, zatrzymaj się i sprawdź komunikat.
 
+**Jeśli po drugim zdjęciu pojawiło się `Segmentation fault (core dumped)`:** wcześniejsza wersja ładowała do jednego procesu dwie różne natywne biblioteki ONNX (1.17 dla usuwania tła i 1.21 dla wykrywania przedmiotów). Odtworzono awarię przy kolejnym wywołaniu usuwania tła. Modele działają teraz w osobnych procesach, uruchamianych automatycznie przez serwer. Nie zmieniono zależności; jeśli poprzednia instalacja się zakończyła, wystarczy w terminalu Codespaces wykonać:
+
+```sh
+git pull --ff-only origin main && npm run build && bash .devcontainer/start.sh
+```
+
+Odśwież dotychczasowy URL portu 3001 i wgraj zdjęcie ponownie. Przy awarii dodatkowego detektora nadal powstaje PNG, pojawia się informacja o ograniczonym wykrywaniu, a model jest uruchamiany ponownie przy następnym zdjęciu. Awaria usuwania tła kończy tylko bieżące zadanie i pozwala spróbować ponownie. Zawieszony model jest zatrzymywany po 120 sekundach.
+
 Proxy Codespaces może zmienić nagłówek Origin na lokalny adres serwera. Aplikacja dopuszcza tę zmianę wyłącznie w Codespaces, dla żądań przeglądarki oznaczonych `Sec-Fetch-Site: same-origin` i lokalnego portu tej aplikacji. Obce strony, inne porty i nagłówki `X-Forwarded-Host` nie uprawniają do obejścia kontroli.
 
 ## Uruchomienie
@@ -62,6 +70,7 @@ Po udanej segmentacji źródło jest zwalniane z pamięci. Sylwetka, tło i wyni
 - `src/client/`: React / TypeScript / Vite, styl według KV Impact'27: gradientowy nagłówek, czerwone panele, przyciski z białą obwódką. Fonty Raleway Light i Barlow Condensed Bold są dołączone lokalnie z licencjami OFL.
 - `src/server/app.ts`: API, prywatne sesje, ograniczona kolejka operacji, statusy i retencja.
 - `src/server/providers.ts`: wymienne `BackgroundRemovalProvider` i `SubjectAnalysisProvider`. Usuwanie tła: **IMG.LY background-removal-node / ISNet, ONNX CPU**; detekcja: **Human / BlazeFace + CenterNet, WASM**. Wyłączono opisy, rozpoznawanie tożsamości, analizę emocji i wszystkie zbędne modele. Nie używamy LLM ani generatora obrazów.
+- `src/server/native-process.ts`, `native-worker.ts`, `native-models.ts`: osobne procesy dla ISNet i OWL-ViT, transport zdjęć przez IPC w pamięci, limit czasu, odtworzenie procesu po awarii oraz zamknięcie razem z aplikacją. Wątki robocze nie zapewniałyby izolacji natywnych bibliotek.
 - `src/server/images.ts`: walidacja typu na podstawie rzeczywistego dekodowania, EXIF, granice alfa, geometria kadru, filtry i eksport.
 - `src/server/canva.ts`: serwerowe OAuth z PKCE, upload osobnej warstwy PNG, stabilne Autofill z brand template i asynchroniczny export; brak browser automation.
 - `src/shared/config.ts`: płótno, kompozycja, wartości suwaków oraz walidacja konfiguracji. Pozycje tła i kotwice sylwetki są stałe; API odrzuca ich zmianę.
@@ -86,6 +95,8 @@ npm run test:browser
 Testy jednostkowe i HTTP obejmują EXIF, niedozwolone pliki, fałszywy MIME, granice przezroczystości, skalowanie i kadrowanie, niezmienione piksele tła, PNG/sRGB, prywatność sesji, wiele osób, ręczną akceptację, usuwanie plików oraz odpowiedzi API Canva. Przykłady geometryczne w testach nie są produkcyjnymi materiałami Impact. Test przeglądarki korzysta z prawdziwych lokalnych modeli i kontrolowanej wyciętej sylwetki; sprawdza również ręczne potwierdzenie i pobranie obrazu.
 
 `check:models` rzeczywiście ładuje modele i wykonuje wnioskowanie. Opcjonalny argument ścieżki pozwala sprawdzić zdjęcie jednej osoby; wycięty plik testowy trafia wyłącznie do `/tmp/impact-isolated-test.png`. Próba modelu na obcym obrazie diagnostycznym nie oznacza kalibracji na zdjęciu użytkownika.
+
+`npm run check:pipeline -- sciezka-do-zdjecia.jpg` wykonuje minimum trzy kolejne pełne zadania HTTP na zdjęciu z tłem, używając prawdziwych modeli. Sprawdza podgląd, działanie obu modeli, pobranie PNG 1600 × 1200 oraz dostępność API po każdym zdjęciu; usuwa zadania testowe. Możesz podać kilka ścieżek, aby porównać różne zdjęcia. Ten test obejmuje połączenie modeli, którego nie sprawdzały wcześniejsze próby osobnych modeli ani przezroczyste fixture PNG. Testy jednostkowe celowo kończą proces pomocniczy sygnałem SIGSEGV i sprawdzają jego odtworzenie oraz limit czasu.
 
 ## Co jeszcze wymaga materiałów lub konfiguracji
 
