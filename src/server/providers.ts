@@ -44,22 +44,28 @@ export class LocalBackgroundRemoval implements BackgroundRemovalProvider {
     }
   }
 }
+export async function hasTransparentBackground(
+  image: Buffer,
+): Promise<boolean> {
+  if (!(await sharp(image).metadata()).hasAlpha) return false;
+  const { data, info } = await sharp(image)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let transparent = 0,
+    visible = 0;
+  for (let i = 3; i < data.length; i += info.channels) {
+    if (data[i] < 12) transparent++;
+    if (data[i] > 12) visible++;
+  }
+  return transparent >= info.width * info.height * 0.01 && visible > 0;
+}
 export class TransparentPngProvider implements BackgroundRemovalProvider {
   async remove(image: Buffer) {
-    const { data, info } = await sharp(image)
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    let transparent = 0,
-      visible = 0;
-    for (let i = 3; i < data.length; i += info.channels) {
-      if (data[i] < 12) transparent++;
-      if (data[i] > 12) visible++;
-    }
-    if (transparent < info.width * info.height * 0.01 || !visible)
+    if (!(await hasTransparentBackground(image)))
       throw new AppError(
         "TRANSPARENCY_REQUIRED",
-        "Ten tryb wymaga PNG z już usuniętym tłem. Wybierz tryb automatyczny dla zwykłego zdjęcia.",
+        "Ten plik nie zawiera sylwetki z przezroczystym tłem.",
       );
     return image;
   }

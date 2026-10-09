@@ -6,16 +6,18 @@ async function confirmReview(page: Page) {
   await page.getByRole("checkbox", { name: /Sprawdziłem zdjęcie/ }).check();
   await page.getByRole("button", { name: "Potwierdź i kontynuuj" }).click();
 }
-async function prepareSpeaker(page: Page, name = "Anna Testowa") {
+async function prepareSpeaker(page: Page) {
   await page.goto("/");
-  await page.getByLabel("Imię i nazwisko").fill(name);
-  await page.getByLabel("Zdjęcie prelegenta", { exact: true }).setInputFiles({
-    name: "subject.png",
-    mimeType: "image/png",
-    buffer: await subjectFixture(),
-  });
-  await page.getByLabel("Przygotowanie sylwetki").selectOption("transparent");
-  await page.getByRole("button", { name: "Przygotuj zdjęcie" }).click();
+  await page
+    .getByLabel("DODAJ ZDJĘCIE NA IMPACT'27", { exact: true })
+    .setInputFiles({
+      name: "subject.png",
+      mimeType: "image/png",
+      buffer: await subjectFixture(),
+    });
+  await page
+    .getByRole("button", { name: "GENERUJ GRAFIKĘ NA IMPACT'27" })
+    .click();
   await expect(
     page.getByText("Zdjęcie wymaga sprawdzenia", { exact: true }),
   ).toBeVisible({ timeout: 60000 });
@@ -54,7 +56,7 @@ test("manual head measurement, fixed framing, PNG download and deletion", async 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("link", { name: "Pobierz PNG", exact: true }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("impact-speaker-anna-testowa.png");
+  expect(download.suggestedFilename()).toBe("Impact'27 photo.png");
   const image = sharp((await download.path())!);
   const m = await image.metadata();
   expect([m.width, m.height, m.format, m.hasAlpha]).toEqual([
@@ -114,7 +116,7 @@ test("shows the locked square background and guides before the first upload", as
 test("rejects a tight head measurement and retains the previous valid preview", async ({
   page,
 }) => {
-  await prepareSpeaker(page, "Tight source test");
+  await prepareSpeaker(page);
   await page.getByText("Pomiar głowy: włosy–broda", { exact: true }).click();
   await page
     .getByRole("spinbutton", {
@@ -123,7 +125,7 @@ test("rejects a tight head measurement and retains the previous valid preview", 
     })
     .fill("90");
   await page.getByRole("button", { name: "Zastosuj pomiar głowy" }).click();
-  await expect(page.getByRole("alert")).toContainText("45%");
+  await expect(page.getByRole("alert")).toContainText("65%");
   await expect(
     page.getByAltText("Podgląd gotowego kadru prelegenta"),
   ).toBeVisible();

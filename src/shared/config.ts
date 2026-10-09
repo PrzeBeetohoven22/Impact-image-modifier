@@ -1,6 +1,13 @@
 import { z } from "zod";
 export const OUTPUT = { width: 1600, height: 1200 } as const;
 export const BACKGROUND_LAYOUT = { left: 0, top: 120, size: 1080 } as const;
+export const OUTPUT_FILENAME = "Impact'27 photo.png";
+export const HEAD_PROPORTIONS = {
+  min: 0.3,
+  target: 0.45,
+  max: 0.55,
+  sourceLimit: 0.65,
+} as const;
 export const gradientModeSchema = z.enum(["canvas", "cutout"]);
 export type GradientMode = z.infer<typeof gradientModeSchema>;
 const slider = z.number().min(-100).max(100);
@@ -64,7 +71,7 @@ export const DEFAULT_COMPOSITION: Composition = {
 };
 export const framingSchema = z
   .object({
-    headRatio: z.number().min(0.3).max(0.45),
+    headRatio: z.number().min(HEAD_PROPORTIONS.min).max(HEAD_PROPORTIONS.max),
     // Original, EXIF-normalized source coordinates; null uses the detector estimate.
     headTop: z.number().min(0).max(40_000).nullable(),
     chin: z.number().min(0).max(40_000).nullable(),
@@ -72,7 +79,7 @@ export const framingSchema = z
   .strict();
 export type Framing = z.infer<typeof framingSchema>;
 export const DEFAULT_FRAMING: Framing = {
-  headRatio: 0.3,
+  headRatio: HEAD_PROPORTIONS.target,
   headTop: null,
   chin: null,
 };

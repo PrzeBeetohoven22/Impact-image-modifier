@@ -45,11 +45,11 @@ Cloud task jest już izolowany. Używaj istniejącego checkoutu; nie twórz work
 ## Pierwsze zdjęcie
 
 1. Tło jest gotowe i zablokowane: biały obszar 1600 × 1200 oraz pełny, oryginalny kwadrat gradientu 1080 × 1080 w punkcie (0, 120). Nie trzeba go wgrywać.
-2. Podaj nazwę i wybierz JPEG, PNG lub WebP do 20 MB, do 40 megapikseli, minimum 300 px na krótszym boku. Wybierz automatyczne usunięcie tła albo wyciętą sylwetkę PNG.
+2. W sekcji **Przygotowanie zdjęcia na Impact'27** kliknij **DODAJ ZDJĘCIE NA IMPACT'27** i wybierz JPEG, PNG lub WebP do 20 MB, do 40 megapikseli, minimum 300 px na krótszym boku. Kliknij **GENERUJ GRAFIKĘ NA IMPACT'27**. Tło usuwamy automatycznie; istniejąca przezroczysta sylwetka jest rozpoznawana bez wyboru trybu.
 3. Przy niepewnej detekcji potwierdź jedną osobę. Przy kilku osobach wybierz inne zdjęcie.
 4. Sprawdź **Pomiar głowy: włosy–broda**. Automatyczny pomiar jest szacunkiem; ustaw linie na wyciętej sylwetce i kliknij **Zastosuj pomiar głowy**, jeśli są nieprawidłowe lub model nie wykrył twarzy.
-5. Domyślnie głowa zajmuje 30% widocznej sylwetki. Możesz wybrać 30–45%; stałe pozostają czubek głowy (y = 240), prawy skraj (x = 1224) i kontakt z dołem. Zbyt krótkie źródło może wymagać większego udziału głowy, a zbyt ciasne jest odrzucane. Kliknij **Aktualizuj podgląd** po zmianie.
-6. Zachowano wcześniejszy preset filtrów. Opcjonalnie włącz **Delikatnie zmniejsz ziarnistość** i zastosuj filtry. Sprawdź maskę, włosy, ubranie i dłonie, zaakceptuj ostrzeżenia, pobierz PNG. Prowadnice występują wyłącznie w podglądzie.
+5. Domyślnie głowa zajmuje 45% widocznej sylwetki. Możesz wybrać 30–55%; stałe pozostają czubek głowy (y = 240), prawy skraj (x = 1224) i kontakt z dołem. Ciasne źródło może wyjątkowo wymagać udziału głowy do 65% (55% + 10 punktów procentowych), z ostrzeżeniem i potwierdzeniem. Jeszcze ciaśniejsze źródło jest odrzucane. Kliknij **Aktualizuj podgląd** po zmianie.
+6. Zachowano wcześniejszy preset filtrów. Opcjonalnie włącz **Delikatnie zmniejsz ziarnistość** i zastosuj filtry. Sprawdź maskę, włosy, ubranie i dłonie, zaakceptuj ostrzeżenia, pobierz **Impact'27 photo.png**. Prowadnice występują wyłącznie w podglądzie.
 
 [Zasady i plan tej iteracji](docs/ITERACJA-KADROWANIA.md) opisują geometrię i dalsze porównania na prawdziwych zdjęciach. Canva pozostaje opcjonalna; jej szablon powinien mieć ten sam stały układ.
 
@@ -57,7 +57,7 @@ Po udanej segmentacji źródło jest zwalniane z pamięci. Sylwetka, tło i wyni
 
 ## Architektura i konfiguracja
 
-- `src/client/`: React / TypeScript / Vite, struktura interfejsu i kontrolki; brak nowych elementów brandingu.
+- `src/client/`: React / TypeScript / Vite, styl według KV Impact'27: gradientowy nagłówek, czerwone panele, przyciski z białą obwódką. Fonty Raleway Light i Barlow Condensed Bold są dołączone lokalnie z licencjami OFL.
 - `src/server/app.ts`: API, prywatne sesje, ograniczona kolejka operacji, statusy i retencja.
 - `src/server/providers.ts`: wymienne `BackgroundRemovalProvider` i `SubjectAnalysisProvider`. Usuwanie tła: **IMG.LY background-removal-node / ISNet, ONNX CPU**; detekcja: **Human / BlazeFace + CenterNet, WASM**. Wyłączono opisy, rozpoznawanie tożsamości, analizę emocji i wszystkie zbędne modele. Nie używamy LLM ani generatora obrazów.
 - `src/server/images.ts`: walidacja typu na podstawie rzeczywistego dekodowania, EXIF, granice alfa, geometria kadru, filtry i eksport.
@@ -91,7 +91,7 @@ Testy jednostkowe i HTTP obejmują EXIF, niedozwolone pliki, fałszywy MIME, gra
 - Wyniki na kilku źródłowych portretach do oceny maski, linii brody i filtrów. Geometria 4:3 została zatwierdzona 9 października 2026; przykład 16:9 nie zmienia formatu.
 - Kalibracja lokalnych filtrów z wynikiem Canva dla identycznego zdjęcia i suwaków.
 - Opcjonalnie, poza planem samodzielnych testów: własna konfiguracja OAuth i szablon Canva, a następnie rzeczywista próba utworzenia oraz edycji projektu. Same testy z kontrolowanym API nie potwierdzają działania na koncie.
-- Docelowy wygląd frontendowy, który projektuje użytkownik.
+- Dalsze szczegóły stylu i oficjalne pliki marki, jeśli zamiennik Barlow Condensed ma zostać zastąpiony Champions Gothic.
 
 Kod i konfiguracja Codespaces są częścią repozytorium. Aby rozpocząć testy, uruchom własną sesję według instrukcji powyżej. Osobny, stale działający serwer nie został skonfigurowany. Zapisany szkic środowiska Codex jest niezależny od Codespaces i wymaga zapisania ustawień oraz publikacji w interfejsie Codex, jeśli chcesz korzystać z tego środowiska.
 

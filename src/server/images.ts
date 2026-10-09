@@ -9,7 +9,11 @@ import type {
   HeadMeasurement,
   LayoutMetrics,
 } from "../shared/config.js";
-import { BACKGROUND_LAYOUT, OUTPUT } from "../shared/config.js";
+import {
+  BACKGROUND_LAYOUT,
+  HEAD_PROPORTIONS,
+  OUTPUT,
+} from "../shared/config.js";
 import { AppError } from "./errors.js";
 export const MAX_UPLOAD = 20 * 1024 * 1024;
 export const MAX_PIXELS = 40_000_000;
@@ -260,10 +264,10 @@ export function placement(
     visibleHeight / (bounds.y + bounds.height - headTop),
   );
   const headRatio = (headHeight * scale) / visibleHeight;
-  if (headRatio > 0.45 + 1e-6)
+  if (headRatio > HEAD_PROPORTIONS.sourceLimit + 1e-6)
     throw new AppError(
       "SOURCE_TOO_TIGHT",
-      "Zdjęcie jest zbyt ciasno wykadrowane: głowa przekroczyłaby 45% sylwetki. Wybierz zdjęcie z większą częścią tułowia.",
+      "Zdjęcie jest zbyt ciasno wykadrowane: głowa przekroczyłaby 65% sylwetki, czyli limit 55% wraz z tolerancją 10 punktów procentowych. Wybierz zdjęcie z większą częścią tułowia.",
     );
   return {
     top: Math.round(c.headTop - (headTop - bounds.y) * scale),
@@ -396,6 +400,10 @@ export async function compose(
     warnings.push(
       `Aby sylwetka dotykała dołu, głowa zajmuje ${Math.round(pos.headRatio * 100)}% jej wysokości. Źródło nie pozwala uzyskać ${Math.round(f.headRatio * 100)}%.`,
     );
+  if (pos.headRatio > HEAD_PROPORTIONS.max + 1e-6)
+    warnings.push(
+      `Ciasny kadr źródłowy: zastosowano tolerancję powyżej 55%. Głowa zajmuje ${(pos.headRatio * 100).toFixed(1)}% sylwetki; dopuszczalne maksimum wynosi 65%. Sprawdź proporcje przed pobraniem.`,
+    );
   if (pos.scale > 1.4)
     warnings.push(
       "Zdjęcie wymaga znacznego powiększenia. Rozważ plik o wyższej rozdzielczości.",
@@ -431,7 +439,7 @@ export async function compose(
   if (left + visibleBounds.x < 0)
     throw new AppError(
       "SUBJECT_TOO_WIDE",
-      "Sylwetka jest zbyt szeroka dla tego układu przy głowie o wysokości co najmniej 30%. Wybierz inne zdjęcie lub węższy kadr źródłowy.",
+      "Sylwetka jest zbyt szeroka dla wybranego udziału głowy. Zmniejsz wysokość głowy do 30% lub wybierz węższy kadr źródłowy.",
     );
   const sx = Math.max(0, -left),
     dx = Math.max(0, left);
@@ -493,17 +501,4 @@ export async function validateExport(input: Buffer) {
       "Eksport nie spełnia wymagań PNG 1600 × 1200, sRGB, bez przezroczystości.",
       502,
     );
-}
-export function outputFilename(name: string) {
-  const safe =
-    name
-      .normalize("NFKD")
-      .replace(/\p{Diacritic}/gu, "")
-      .replace(/ł/g, "l")
-      .replace(/Ł/g, "L")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 80) || "speaker";
-  return `impact-speaker-${safe}.png`;
 }

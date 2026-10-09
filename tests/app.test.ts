@@ -155,7 +155,7 @@ describe("HTTP speaker workflow", () => {
       .expect(200);
     const download = await client.get(`/api/jobs/${id}/download`).expect(200);
     expect(download.headers["content-disposition"]).toContain(
-      "impact-speaker-anna-zolc.png",
+      "Impact'27 photo.png",
     );
     await validateExport(download.body);
     await client.delete(`/api/jobs/${id}`).expect(204);
@@ -357,6 +357,54 @@ it("locks the default brand background and fixed composition coordinates", async
       framing: DEFAULT_FRAMING,
       filters: IMPACT_PRESET,
       composition: { ...DEFAULT_COMPOSITION, subjectRight: 1400 },
+    })
+    .expect(400);
+});
+
+it("needs only the photo, uses a fixed filename and automatically preserves an existing cutout", async () => {
+  const { default: sharp } = await import("sharp");
+  const remove = vi.fn(async () => subjectFixture());
+  const i = createApp({
+    defaultGradient: await gradientFixture(),
+    analysis: {
+      analyze: async () => ({ people: 1, faces: [face], warnings: [] }),
+    },
+    background: { remove },
+  });
+  instances.push(i);
+  const client = request.agent(i.app);
+  const cutout = await client
+    .post("/api/jobs")
+    .attach("photo", await subjectFixture(), {
+      filename: "cutout.png",
+      contentType: "image/png",
+    })
+    .expect(202);
+  await ready(client, cutout.body.id);
+  expect(cutout.body.filename).toBe("Impact'27 photo.png");
+  expect(remove).not.toHaveBeenCalled();
+  const opaque = await sharp(await subjectFixture())
+    .flatten({ background: "#fff" })
+    .jpeg()
+    .toBuffer();
+  const photo = await client
+    .post("/api/jobs")
+    .field("name", "ignored")
+    .field("mode", "transparent")
+    .attach("photo", opaque, {
+      filename: "portrait.jpg",
+      contentType: "image/jpeg",
+    })
+    .expect(202);
+  await ready(client, photo.body.id);
+  expect(photo.body.filename).toBe("Impact'27 photo.png");
+  expect(remove).toHaveBeenCalledTimes(1);
+  await client
+    .post(`/api/jobs/${cutout.body.id}/render`)
+    .send({
+      framing: { ...DEFAULT_FRAMING, headRatio: 0.65 },
+      filters: IMPACT_PRESET,
+      composition: DEFAULT_COMPOSITION,
     })
     .expect(400);
 });

@@ -7,7 +7,6 @@ import {
   compose,
   validateExport,
   applyFilters,
-  outputFilename,
   MAX_UPLOAD,
   prepareGradient,
   buildFixedBackground,
@@ -152,7 +151,7 @@ describe("matting and composition", () => {
       { x: 90, y: 40, width: 320, height: 1100 },
       head,
       DEFAULT_COMPOSITION,
-      DEFAULT_FRAMING,
+      { ...DEFAULT_FRAMING, headRatio: 0.3 },
     );
     expect(tall.top).toBe(240);
     expect(tall.scale).toBeCloseTo(1.6);
@@ -161,18 +160,18 @@ describe("matting and composition", () => {
       { x: 90, y: 40, width: 320, height: 500 },
       head,
       DEFAULT_COMPOSITION,
-      DEFAULT_FRAMING,
+      { ...DEFAULT_FRAMING, headRatio: 0.3 },
     );
     expect(short.headRatio).toBeCloseTo(0.36);
     expect(short.top + short.height).toBe(1200);
     expect(() =>
       placement(
-        { x: 90, y: 40, width: 320, height: 300 },
+        { x: 90, y: 40, width: 320, height: 270 },
         head,
         DEFAULT_COMPOSITION,
-        DEFAULT_FRAMING,
+        { ...DEFAULT_FRAMING, headRatio: 0.3 },
       ),
-    ).toThrow(/45%/);
+    ).toThrow(/65%/);
   });
   it("requires a chin measurement when no face was detected", async () => {
     const head = await measureHead(await subjectFixture(), {
@@ -258,12 +257,6 @@ describe("matting and composition", () => {
         { people: 1, faces: [face], warnings: [] },
       ),
     ).rejects.toMatchObject({ code: "HEAD_TOP_MISMATCH" });
-  });
-  it("sanitizes names without paths or header injection", () => {
-    expect(outputFilename("Łukasz Żółć /../\r\n")).toBe(
-      "impact-speaker-lukasz-zolc.png",
-    );
-    expect(outputFilename("///")).toBe("impact-speaker-speaker.png");
   });
 });
 
@@ -360,7 +353,7 @@ describe("approved fixed composition", () => {
       expect(pixels.every((value) => value === 255)).toBe(true);
     }
   });
-  it.each([30, 35, 45])(
+  it.each([30, 45, 55])(
     "anchors the visible right edge and bottom with %i%% head height",
     async (percent) => {
       const out = await compose(
@@ -395,7 +388,7 @@ describe("approved fixed composition", () => {
       source,
       await gradientFixture(),
       DEFAULT_COMPOSITION,
-      { ...DEFAULT_FRAMING, headTop: 40, chin: 220 },
+      { ...DEFAULT_FRAMING, headRatio: 0.3, headTop: 40, chin: 220 },
       NEUTRAL_PRESET,
       {
         people: 1,
@@ -408,4 +401,40 @@ describe("approved fixed composition", () => {
     expect(bounds.width).toBeLessThan(550);
     expect(bounds.y + bounds.height).toBe(1200);
   });
+});
+
+it("accepts the full 10-point source tolerance and refuses a tighter crop", async () => {
+  const source = await sharp(
+    Buffer.from(
+      '<svg width="500" height="500"><rect x="175" y="40" width="150" height="260" fill="#b89478"/><rect x="145" y="300" width="210" height="140" fill="#273b65"/></svg>',
+    ),
+  )
+    .png()
+    .toBuffer();
+  const out = await compose(
+    source,
+    await gradientFixture(),
+    DEFAULT_COMPOSITION,
+    { ...DEFAULT_FRAMING, headTop: 40, chin: 300 },
+    NEUTRAL_PRESET,
+    {
+      people: 1,
+      faces: [{ x: 175, y: 50, width: 150, height: 240 }],
+      warnings: [],
+    },
+  );
+  expect(out.layout.headRatio).toBeCloseTo(0.65);
+  expect(out.warnings.join(" ")).toContain("tolerancję");
+  const bounds = await subjectBounds(out.layer);
+  expect([bounds.y, bounds.x + bounds.width, bounds.y + bounds.height]).toEqual(
+    [240, 1224, 1200],
+  );
+  expect(() =>
+    placement(
+      { x: 145, y: 40, width: 210, height: 399 },
+      { top: 40, chin: 300, sourceWidth: 500, sourceHeight: 500 },
+      DEFAULT_COMPOSITION,
+      DEFAULT_FRAMING,
+    ),
+  ).toThrow(/65%/);
 });

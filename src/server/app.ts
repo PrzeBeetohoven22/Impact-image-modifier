@@ -14,13 +14,13 @@ import {
   DEFAULT_COMPOSITION,
   DEFAULT_FRAMING,
   IMPACT_PRESET,
+  OUTPUT_FILENAME,
   renderSchema,
   gradientModeSchema,
 } from "../shared/config.js";
 import {
   normalizeUpload,
   compose,
-  outputFilename,
   MAX_UPLOAD,
   prepareGradient,
   measureHead,
@@ -30,6 +30,7 @@ import {
   LocalBackgroundRemoval,
   LocalSubjectAnalysis,
   TransparentPngProvider,
+  hasTransparentBackground,
   type BackgroundRemovalProvider,
   type SubjectAnalysisProvider,
 } from "./providers.js";
@@ -358,9 +359,10 @@ export function createApp(options: AppOptions = {}) {
         "UNSUPPORTED_TYPE",
         "Wybierz zdjęcie JPEG, PNG lub WebP.",
       );
-    const name = z.string().trim().min(1).max(120).parse(req.body.name);
-    const mode = z.enum(["auto", "transparent"]).parse(req.body.mode ?? "auto");
     const source = await normalizeUpload(req.file.buffer, req.file.mimetype);
+    const mode = (await hasTransparentBackground(source))
+      ? "transparent"
+      : "auto";
     const retained = [...sessions.values()].reduce(
       (count, value) => count + value.jobs.size,
       0,
@@ -391,7 +393,7 @@ export function createApp(options: AppOptions = {}) {
         warnings: [],
         hasPreview: false,
         hasSubject: false,
-        filename: outputFilename(name),
+        filename: OUTPUT_FILENAME,
         expiresAt: Date.now() + ttl,
         revision: 0,
       },
@@ -605,7 +607,7 @@ export function createApp(options: AppOptions = {}) {
       if (error instanceof z.ZodError) {
         res.status(400).json({
           code: "INVALID_SETTINGS",
-          message: "Sprawdź nazwę prelegenta i zakresy ustawień.",
+          message: "Sprawdź zakresy ustawień.",
         });
         return;
       }

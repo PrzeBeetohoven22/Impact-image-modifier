@@ -5,6 +5,7 @@ import {
   DEFAULT_COMPOSITION,
   DEFAULT_FRAMING,
   IMPACT_PRESET,
+  HEAD_PROPORTIONS,
   NEUTRAL_PRESET,
 } from "../shared/config";
 import "./styles.css";
@@ -110,10 +111,8 @@ function Range({
 function App() {
   const [status, setStatus] = useState<Status>();
   const [job, setJob] = useState<JobView>();
-  const [name, setName] = useState("");
   const [photo, setPhoto] = useState<File>();
   const [source, setSource] = useState("");
-  const [mode, setMode] = useState("auto");
   const [gradientPreview, setGradientPreview] = useState("");
   const [settings, setSettings] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -181,8 +180,6 @@ function App() {
       setDirty(false);
       const data = new FormData();
       data.set("photo", photo);
-      data.set("name", name);
-      data.set("mode", mode);
       setJob(await api("/api/jobs", { method: "POST", body: data }));
     });
   }
@@ -215,11 +212,11 @@ function App() {
     <main>
       <header>
         <div>
-          <p className="eyebrow">Narzędzie produkcyjne</p>
+          <p className="eyebrow">Impact'27 · studio zdjęć</p>
           <h1>Zdjęcia prelegentów</h1>
           <p>Jedna sylwetka. Stałe tło. PNG 1600 × 1200.</p>
         </div>
-        <span className="badge">Wersja robocza interfejsu</span>
+        <span className="badge">PNG 1600 × 1200</span>
       </header>
       {error && (
         <div className="notice error" role="alert">
@@ -228,9 +225,9 @@ function App() {
       )}
       <div className="workspace">
         <aside>
-          <section>
+          <section className="preparation-panel">
             <h2>
-              <span className="step">1</span> Tło i zdjęcie
+              <span className="step">1</span> Przygotowanie zdjęcia na Impact'27
             </h2>
             <p className="hint">
               Wybrany gradient Impact jest gotowy do użycia. Kwadrat ma stałą
@@ -244,48 +241,32 @@ function App() {
               />
             )}
             <form onSubmit={(e) => void start(e)}>
-              <label>
-                Imię i nazwisko
-                <input
-                  required
-                  maxLength={120}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Nazwa prelegenta"
-                />
-              </label>
-              <label className="file">
-                Zdjęcie prelegenta
+              <label className="file impact-upload">
+                DODAJ ZDJĘCIE NA IMPACT'27
                 <input
                   type="file"
                   required
                   accept="image/png,image/jpeg,image/webp"
+                  disabled={busy || processing}
                   onChange={(e) => setPhoto(e.target.files?.[0])}
                 />
-              </label>
-              <label>
-                Przygotowanie sylwetki
-                <select value={mode} onChange={(e) => setMode(e.target.value)}>
-                  <option value="auto">Automatyczne usunięcie tła</option>
-                  <option value="transparent">PNG z już usuniętym tłem</option>
-                </select>
               </label>
               <p className="hint">
                 JPEG, PNG lub WebP · do 20 MB · minimum 300 px na krótszym boku.
                 Pliki są usuwane z pamięci po 20 minutach.
               </p>
-              <button
-                className="primary"
-                disabled={
-                  busy ||
-                  processing ||
-                  !status?.hasGradient ||
-                  !photo ||
-                  !name.trim()
-                }
-              >
-                {busy ? "Przetwarzanie…" : "Przygotuj zdjęcie"}
-              </button>
+              <div className="generate-action">
+                <button
+                  className="primary prepare-cta"
+                  disabled={
+                    busy || processing || !status?.hasGradient || !photo
+                  }
+                >
+                  {busy || processing
+                    ? "Przetwarzanie…"
+                    : "GENERUJ GRAFIKĘ NA IMPACT'27"}
+                </button>
+              </div>
             </form>
           </section>
           <section>
@@ -298,8 +279,8 @@ function App() {
             </p>
             <Range
               label="Wysokość głowy (% sylwetki)"
-              min={30}
-              max={45}
+              min={HEAD_PROPORTIONS.min * 100}
+              max={HEAD_PROPORTIONS.max * 100}
               step={1}
               value={Math.round(settings.framing.headRatio * 100)}
               disabled={!editable}
@@ -427,7 +408,8 @@ function App() {
               <p className="hint">
                 Gradient: 1080 × 1080 px, x = 0, y = 120. Czubek głowy: y = 240.
                 Prawy skraj sylwetki: x = 1224. Dół sylwetki: y = 1200. Głowa:
-                docelowo 30%, maksymalnie 45% widocznej sylwetki.
+                docelowo 45%, zwykle 30–55% widocznej sylwetki. Dla ciasnego
+                źródła dopuszczamy do 65%, z ostrzeżeniem.
               </p>
             </details>
           </section>
@@ -611,7 +593,7 @@ function App() {
                 </div>
               )}
           </section>
-          <section>
+          <section className="download-panel">
             <h2>
               <span className="step">3</span> Pobieranie
             </h2>
@@ -712,8 +694,8 @@ function App() {
         </div>
       </div>
       <footer>
-        Sprawdź włosy, dłonie i krawędzie ubrania przed użyciem grafiki.
-        Pomiar głowy i wygląd filtrów oceń na swoim zdjęciu źródłowym.
+        Sprawdź włosy, dłonie i krawędzie ubrania przed użyciem grafiki. Pomiar
+        głowy i wygląd filtrów oceń na swoim zdjęciu źródłowym.
       </footer>
     </main>
   );
