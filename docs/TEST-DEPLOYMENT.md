@@ -1,6 +1,6 @@
 # Uruchomienie pod adresem do testów
 
-Aplikacja jest przygotowana lokalnie. Kod nie został jeszcze wysłany do GitHub, a serwer nie został wdrożony. Zapisanie i publikacja konfiguracji środowiska Codex nie tworzą adresu WWW aplikacji.
+Kod aplikacji, konfiguracja Codespaces i instrukcje są częścią repozytorium. Osobny, stale działający serwer nie został jeszcze wdrożony. Zapisanie i publikacja konfiguracji środowiska Codex nie tworzą adresu WWW aplikacji.
 
 Do pierwszych prywatnych testów bez osobnego hostingu użyj [instrukcji GitHub Codespaces](PIERWSZE-URUCHOMIENIE.html). Dalsza część tego dokumentu opisuje osobne wdrożenie na serwerze, gdy będzie potrzebny stale dostępny URL.
 
@@ -8,7 +8,7 @@ Do pierwszych prywatnych testów bez osobnego hostingu użyj [instrukcji GitHub 
 
 **Co pozostało, po kolei**
 
-1. **Zapisać kod i wysłać go do repozytorium GitHub** `PrzeBeetohoven22/Impact-image-modifier`. Obecnie pliki są lokalne i nieśledzone przez Git. W pierwszym commicie muszą znaleźć się kod, lockfile oraz katalogi `assets/` i `reference_assets/`. Plik `.env`, sekrety, zdjęcia testowe, `node_modules/` i `dist/` nie powinny być wysyłane. Hosting musi dostać dostęp do repozytorium, jeśli jest prywatne.
+1. **Użyć gałęzi z aktualnym kodem w repozytorium GitHub** `PrzeBeetohoven22/Impact-image-modifier`. Jeśli ostatnie zmiany są tylko lokalne, najpierw je zapisać i wysłać. Repozytorium powinno zawierać kod, lockfile oraz katalogi `assets/` i `reference_assets/`. Plik `.env`, sekrety, zdjęcia testowe, `node_modules/` i `dist/` nie powinny być wysyłane. Hosting musi dostać dostęp do repozytorium, jeśli jest prywatne.
 2. **Utworzyć usługę Web Service z tego repozytorium.** Wybrać gałąź, na którą rzeczywiście trafił kod. Frontend i API działają razem w jednym serwerze; nie trzeba tworzyć osobnego hostingu dla Reacta.
 3. **Ustawić instalację, uruchomienie i zmienne** zgodnie z tabelą poniżej. Wybrać jedną instancję bez automatycznego zwiększania liczby instancji. Do testów potrzebny jest stale uruchomiony serwer Linux x64, ponieważ aplikacja przetwarza zdjęcia lokalnymi modelami i przechowuje sesje w pamięci.
 4. **Ograniczyć dostęp do testerów** przez bramkę logowania hostingu albo reverse proxy z hasłem/SSO. Aplikacja nie ma jeszcze logowania. Ochrona musi obejmować stronę i API; przed wdrożeniem należy wybrać i skonfigurować konkretną bramkę. Sam adres HTTPS nie ogranicza dostępu. Trzeba też potwierdzić sposób spełnienia warunków AGPL użytej biblioteki IMG.LY lub zmienić licencję/provider.

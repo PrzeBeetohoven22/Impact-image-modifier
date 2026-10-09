@@ -81,6 +81,6 @@ Testy jednostkowe i HTTP obejmują EXIF, niedozwolone pliki, fałszywy MIME, gra
 - Opcjonalnie, poza planem samodzielnych testów: własna konfiguracja OAuth i szablon Canva, a następnie rzeczywista próba utworzenia oraz edycji projektu. Same testy z kontrolowanym API nie potwierdzają działania na koncie.
 - Docelowy wygląd frontendowy, który projektuje użytkownik.
 
-Kod jest przygotowany lokalnie w checkoutcie. Nie został automatycznie wysłany na GitHub ani wdrożony. Zapisany szkic konfiguracji środowiska wymaga przeglądu, zapisania ustawień i publikacji w interfejsie środowiska.
+Kod i konfiguracja Codespaces są częścią repozytorium. Aby rozpocząć testy, uruchom własną sesję według instrukcji powyżej. Osobny, stale działający serwer nie został skonfigurowany. Zapisany szkic środowiska Codex jest niezależny od Codespaces i wymaga zapisania ustawień oraz publikacji w interfejsie Codex, jeśli chcesz korzystać z tego środowiska.
 
 Plan dalszych prac: [uruchomienie pod URL do testów](docs/TEST-DEPLOYMENT.md) oraz [specyfikacja frontendu](docs/FRONTEND.md).
