@@ -143,7 +143,7 @@ describe("HTTP speaker workflow", () => {
     const modified = await client
       .post(`/api/jobs/${id}/render`)
       .send({
-        framing: { ...DEFAULT_FRAMING, x: 25 },
+        framing: { ...DEFAULT_FRAMING, headRatio: 0.35 },
         filters: IMPACT_PRESET,
         composition: DEFAULT_COMPOSITION,
       })
@@ -201,6 +201,25 @@ describe("HTTP speaker workflow", () => {
       .post(`/api/jobs/${id}/review`)
       .send({ confirmSinglePerson: true })
       .expect(202);
+    const measured = await ready(client, id);
+    expect(measured.error.code).toBe("HEAD_MEASUREMENT_REQUIRED");
+    await client.get(`/api/jobs/${id}/download`).expect(409);
+    await client
+      .post(`/api/jobs/${id}/review`)
+      .send({ confirmSinglePerson: true })
+      .expect(409);
+    await client
+      .post(`/api/jobs/${id}/render`)
+      .send({
+        framing: { ...DEFAULT_FRAMING, headTop: 40, chin: 220 },
+        composition: DEFAULT_COMPOSITION,
+        filters: IMPACT_PRESET,
+      })
+      .expect(200);
+    await client
+      .post(`/api/jobs/${id}/review`)
+      .send({ confirmSinglePerson: true })
+      .expect(200);
     expect((await ready(client, id)).state).toBe("complete");
   });
   it("keeps images private to their uploading session", async () => {
@@ -248,12 +267,12 @@ it("keeps the last valid image after rejecting a framing that hides the subject"
   const r = await client
     .post(`/api/jobs/${id}/render`)
     .send({
-      framing: { zoom: 0.5, x: 800, y: 0 },
+      framing: { ...DEFAULT_FRAMING, chin: 7000 },
       filters: IMPACT_PRESET,
-      composition: { ...DEFAULT_COMPOSITION, targetX: 1600, anchor: "subject" },
+      composition: DEFAULT_COMPOSITION,
     })
     .expect(400);
-  expect(r.body.code).toBe("SUBJECT_OUTSIDE");
+  expect(r.body.code).toBe("INVALID_HEAD_MEASUREMENT");
   const after = await client.get(`/api/jobs/${id}`);
   expect(after.body.state).toBe("complete");
   expect(after.body.revision).toBe(before.body.revision);
@@ -304,4 +323,40 @@ it("uses the supplied default gradient for a speaker without a background upload
       .raw()
       .toBuffer();
   expect(await pixel(download.body)).toEqual(await pixel(gradient));
+});
+
+it("locks the default brand background and fixed composition coordinates", async () => {
+  const i = createApp({
+    defaultGradient: await gradientFixture(),
+    analysis: {
+      analyze: async () => ({ people: 1, faces: [face], warnings: [] }),
+    },
+  });
+  instances.push(i);
+  const client = request.agent(i.app);
+  await client
+    .post("/api/gradient")
+    .attach("gradient", await gradientFixture(), {
+      filename: "new.png",
+      contentType: "image/png",
+    })
+    .expect(409);
+  const created = await client
+    .post("/api/jobs")
+    .field("name", "Locked layout")
+    .field("mode", "transparent")
+    .attach("photo", await subjectFixture(), {
+      filename: "subject.png",
+      contentType: "image/png",
+    })
+    .expect(202);
+  await ready(client, created.body.id);
+  await client
+    .post(`/api/jobs/${created.body.id}/render`)
+    .send({
+      framing: DEFAULT_FRAMING,
+      filters: IMPACT_PRESET,
+      composition: { ...DEFAULT_COMPOSITION, subjectRight: 1400 },
+    })
+    .expect(400);
 });

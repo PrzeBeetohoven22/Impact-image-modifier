@@ -1,5 +1,6 @@
 import { z } from "zod";
 export const OUTPUT = { width: 1600, height: 1200 } as const;
+export const BACKGROUND_LAYOUT = { left: 0, top: 120, size: 1080 } as const;
 export const gradientModeSchema = z.enum(["canvas", "cutout"]);
 export type GradientMode = z.infer<typeof gradientModeSchema>;
 const slider = z.number().min(-100).max(100);
@@ -19,6 +20,7 @@ export const filterSchema = z
     sharpness: z.number().min(0).max(100),
     clarity: slider,
     vignette: z.number().min(0).max(100),
+    denoise: z.boolean().default(false),
   })
   .strict();
 export type Filters = z.infer<typeof filterSchema>;
@@ -38,47 +40,42 @@ export const IMPACT_PRESET: Filters = {
   sharpness: 20,
   clarity: 0,
   vignette: 0,
+  denoise: false,
 };
 export const NEUTRAL_PRESET: Filters = Object.fromEntries(
-  Object.keys(IMPACT_PRESET).map((k) => [k, k === "invert" ? false : 0]),
+  Object.keys(IMPACT_PRESET).map((k) => [
+    k,
+    k === "invert" || k === "denoise" ? false : 0,
+  ]),
 ) as Filters;
 export const compositionSchema = z
   .object({
-    targetX: z.number().min(0).max(1600),
-    targetBottom: z.number().min(0).max(1200),
-    maxSubjectWidth: z.number().min(100).max(1600),
-    maxSubjectHeight: z.number().min(100).max(1200),
-    faceTargetX: z.number().min(0).max(1600),
-    faceTargetY: z.number().min(0).max(1200),
-    minimumHeadMargin: z.number().min(0).max(300),
-    placementTolerance: z.number().min(0).max(200),
-    anchor: z.enum(["subject", "face"]),
-    crop: z.enum(["contain", "allow-bottom"]),
+    headTop: z.literal(240),
+    subjectRight: z.literal(1224),
+    targetBottom: z.literal(1200),
   })
   .strict();
 export type Composition = z.infer<typeof compositionSchema>;
-// Provisional 4:3 framing, adjustable until an approved 4:3 asset is supplied.
+// Approved on 9 October 2026. Coordinates are fixed, including in API requests.
 export const DEFAULT_COMPOSITION: Composition = {
-  targetX: 880,
+  headTop: 240,
+  subjectRight: 1224,
   targetBottom: 1200,
-  maxSubjectWidth: 1120,
-  maxSubjectHeight: 1080,
-  faceTargetX: 880,
-  faceTargetY: 330,
-  minimumHeadMargin: 90,
-  placementTolerance: 40,
-  anchor: "face",
-  crop: "allow-bottom",
 };
 export const framingSchema = z
   .object({
-    zoom: z.number().min(0.5).max(2),
-    x: z.number().min(-800).max(800),
-    y: z.number().min(-600).max(600),
+    headRatio: z.number().min(0.3).max(0.45),
+    // Original, EXIF-normalized source coordinates; null uses the detector estimate.
+    headTop: z.number().min(0).max(40_000).nullable(),
+    chin: z.number().min(0).max(40_000).nullable(),
   })
   .strict();
 export type Framing = z.infer<typeof framingSchema>;
-export const DEFAULT_FRAMING: Framing = { zoom: 1, x: 0, y: 0 };
+export const DEFAULT_FRAMING: Framing = {
+  headRatio: 0.3,
+  headTop: null,
+  chin: null,
+};
 export const renderSchema = z
   .object({
     framing: framingSchema,
@@ -89,6 +86,19 @@ export const renderSchema = z
 export type RenderSettings = z.infer<typeof renderSchema>;
 export type Rect = { x: number; y: number; width: number; height: number };
 export type Analysis = { people: number; faces: Rect[]; warnings: string[] };
+export type HeadMeasurement = {
+  top: number;
+  chin: number | null;
+  sourceWidth: number;
+  sourceHeight: number;
+};
+export type LayoutMetrics = {
+  headTop: number;
+  subjectRight: number;
+  subjectBottom: number;
+  headRatio: number;
+  measurement: "estimated" | "manual";
+};
 export type JobState =
   | "idle"
   | "uploading"
@@ -109,6 +119,9 @@ export type JobView = {
   canvaError?: { code: string; message: string };
   canvaDesign?: { id: string; editUrl: string };
   hasPreview: boolean;
+  hasSubject: boolean;
+  head?: HeadMeasurement;
+  layout?: LayoutMetrics;
   filename: string;
   analysis?: Analysis;
   expiresAt: number;

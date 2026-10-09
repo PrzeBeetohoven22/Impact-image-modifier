@@ -171,12 +171,58 @@ summary:focus-visible {
   margin: 0;
 }
 .preview {
+  position: relative;
   aspect-ratio: 4/3;
   width: 100%;
   background: #f3f3f4;
   border: 1px solid #e2e3e6;
   display: grid;
   place-items: center;
+}
+.layout-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.layout-guides rect,
+.layout-guides path {
+  fill: none;
+  stroke: #6245ad;
+  stroke-width: 2;
+  stroke-dasharray: 10 8;
+}
+.layout-guides text {
+  fill: #513891;
+  font-size: 22px;
+  paint-order: stroke;
+  stroke: white;
+  stroke-width: 4;
+}
+.head-reference {
+  position: relative;
+  background: repeating-conic-gradient(#edf0f4 0% 25%, #fff 0% 50%) 0 0 / 16px
+    16px;
+}
+.head-reference img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.measurement-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px solid #6245ad;
+  color: #513891;
+  font-size: 11px;
+  text-shadow: 0 0 3px white;
+  pointer-events: none;
+}
+.measurement-line.chin {
+  border-color: #138373;
+  color: #086b5d;
 }
 .preview img {
   width: 100%;

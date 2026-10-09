@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type {
-  Filters,
-  JobView,
-  RenderSettings,
-  GradientMode,
-} from "../shared/config";
+import type { Filters, JobView, RenderSettings } from "../shared/config";
 import {
   DEFAULT_COMPOSITION,
   DEFAULT_FRAMING,
@@ -31,7 +26,7 @@ const stateLabels: Record<JobView["state"], string> = {
   "manual-review-required": "Zdjęcie wymaga sprawdzenia",
   failed: "Przetwarzanie nie powiodło się",
 };
-const labels: Record<Exclude<keyof Filters, "invert">, string> = {
+const labels: Record<Exclude<keyof Filters, "invert" | "denoise">, string> = {
   temperature: "Temperatura",
   tint: "Odcień",
   brightness: "Jasność",
@@ -119,13 +114,13 @@ function App() {
   const [photo, setPhoto] = useState<File>();
   const [source, setSource] = useState("");
   const [mode, setMode] = useState("auto");
-  const [gradientMode, setGradientMode] = useState<GradientMode>("canvas");
   const [gradientPreview, setGradientPreview] = useState("");
   const [settings, setSettings] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [guides, setGuides] = useState(true);
   useEffect(() => {
     void api<Status>("/api/status")
       .then((value) => {
@@ -175,17 +170,6 @@ function App() {
       setBusy(false);
     }
   }
-  async function uploadGradient(file?: File) {
-    if (!file) return;
-    await action(async () => {
-      const data = new FormData();
-      data.set("gradient", file);
-      data.set("mode", gradientMode);
-      await api("/api/gradient", { method: "POST", body: data });
-      setStatus(await api("/api/status"));
-      setGradientPreview(`/api/gradient/preview?v=${Date.now()}`);
-    });
-  }
   async function start(e: React.FormEvent) {
     e.preventDefault();
     if (!photo) return;
@@ -219,7 +203,14 @@ function App() {
     job &&
     !["complete", "failed", "manual-review-required"].includes(job.state),
   );
-  const editable = Boolean(job?.hasPreview) && !busy && !processing;
+  const editable = Boolean(job?.hasSubject) && !busy && !processing;
+  const measurementTop = settings.framing.headTop ?? job?.head?.top ?? 0;
+  const measurementChin =
+    settings.framing.chin ??
+    job?.head?.chin ??
+    Math.round(
+      measurementTop + ((job?.head?.sourceHeight ?? 0) - measurementTop) * 0.3,
+    );
   return (
     <main>
       <header>
@@ -241,53 +232,15 @@ function App() {
             <h2>
               <span className="step">1</span> Tło i zdjęcie
             </h2>
-            <label>
-              Materiał tła
-              <select
-                value={gradientMode}
-                disabled={busy || processing}
-                onChange={(e) =>
-                  setGradientMode(e.target.value as GradientMode)
-                }
-              >
-                <option value="canvas">Gotowe tło 1600 × 1200</option>
-                <option value="cutout">
-                  Wycinek gradientu — pomiń czarne marginesy
-                </option>
-              </select>
-            </label>
-            {gradientMode === "cutout" && (
-              <p className="hint">
-                Usuniemy zewnętrzne czarne marginesy i wypełnimy płótno 4:3
-                proporcjonalnie. Nadmiar przytniemy symetrycznie, bez
-                rozciągania i filtrów. Sprawdź podgląd po imporcie.
-              </p>
-            )}
-            <label className="file">
-              {gradientMode === "cutout"
-                ? "Plik wycinka gradientu"
-                : "Zatwierdzone tło 1600 × 1200 (opcjonalnie)"}
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                disabled={busy || processing}
-                onChange={(e) => void uploadGradient(e.target.files?.[0])}
-              />
-            </label>
             <p className="hint">
-              {status?.hasGradient
-                ? status.gradientSource === "default"
-                  ? "Wybrany gradient Impact jest gotowy do użycia. Możesz od razu wgrać zdjęcie prelegenta."
-                  : "Tło wgrane. Zachowamy jego kolory i układ."
-                : gradientMode === "cutout"
-                  ? "Wgraj wybrany wycinek gradientu jako PNG, JPEG lub WebP."
-                  : "Wgraj plik tła z gradientem Impact, przygotowany w docelowych proporcjach 4:3."}
+              Wybrany gradient Impact jest gotowy do użycia. Kwadrat ma stałą
+              pozycję; kolory i tło pozostają takie same dla każdego prelegenta.
             </p>
             {gradientPreview && (
               <img
                 className="gradient-preview"
                 src={gradientPreview}
-                alt="Podgląd tła po imporcie"
+                alt="Podgląd stałego tła"
               />
             )}
             <form onSubmit={(e) => void start(e)}>
@@ -339,37 +292,30 @@ function App() {
             <h2>
               <span className="step">2</span> Kadrowanie
             </h2>
+            <p className="hint">
+              Czubek głowy, prawy skraj i dolna krawędź są stałe. Zmieniamy
+              wyłącznie proporcjonalne powiększenie i przycięcie dołu zdjęcia.
+            </p>
             <Range
-              label="Powiększenie"
-              min={0.5}
-              max={2}
-              step={0.01}
-              value={settings.framing.zoom}
+              label="Wysokość głowy (% sylwetki)"
+              min={30}
+              max={45}
+              step={1}
+              value={Math.round(settings.framing.headRatio * 100)}
               disabled={!editable}
-              onChange={(zoom) =>
-                update({ ...settings, framing: { ...settings.framing, zoom } })
+              onChange={(value) =>
+                update({
+                  ...settings,
+                  framing: { ...settings.framing, headRatio: value / 100 },
+                })
               }
             />
-            <Range
-              label="Pozycja pozioma"
-              min={-800}
-              max={800}
-              value={settings.framing.x}
-              disabled={!editable}
-              onChange={(x) =>
-                update({ ...settings, framing: { ...settings.framing, x } })
-              }
-            />
-            <Range
-              label="Pozycja pionowa"
-              min={-600}
-              max={600}
-              value={settings.framing.y}
-              disabled={!editable}
-              onChange={(y) =>
-                update({ ...settings, framing: { ...settings.framing, y } })
-              }
-            />
+            {job?.layout && (
+              <p className="hint">
+                Głowa w wyniku: {(job.layout.headRatio * 100).toFixed(1)}%
+                wysokości widocznej sylwetki.
+              </p>
+            )}
             <div className="buttons">
               <button disabled={!editable} onClick={() => void render()}>
                 Aktualizuj podgląd{dirty ? " •" : ""}
@@ -383,93 +329,106 @@ function App() {
                 Resetuj kadr
               </button>
             </div>
-            <details>
-              <summary>Reguły kompozycji</summary>
-              <p className="hint">
-                Pozycje w pikselach płótna 1600 × 1200. Wartości wyjściowe
-                wymagają zatwierdzenia na docelowym przykładzie.
-              </p>
-              {(
-                [
-                  "targetX",
-                  "targetBottom",
-                  "maxSubjectWidth",
-                  "maxSubjectHeight",
-                  "faceTargetX",
-                  "faceTargetY",
-                  "minimumHeadMargin",
-                  "placementTolerance",
-                ] as const
-              ).map((key, i) => (
-                <label key={key}>
-                  {
-                    [
-                      "Środek sylwetki X",
-                      "Dolna krawędź sylwetki",
-                      "Maksymalna szerokość",
-                      "Maksymalna wysokość",
-                      "Środek twarzy X",
-                      "Środek twarzy Y",
-                      "Margines nad głową",
-                      "Tolerancja pozycji",
-                    ][i]
-                  }
-                  <input
-                    type="number"
-                    disabled={!editable}
-                    value={settings.composition[key]}
-                    onChange={(e) =>
-                      update({
-                        ...settings,
-                        composition: {
-                          ...settings.composition,
-                          [key]: Number(e.target.value),
-                        },
-                      })
-                    }
+            {job?.hasSubject && job.head && (
+              <details open={job.error?.code === "HEAD_MEASUREMENT_REQUIRED"}>
+                <summary>Pomiar głowy: włosy–broda</summary>
+                <p className="hint">
+                  Sprawdź czubek włosów i spód brody. Linie służą do kadrowania;
+                  nie zmieniają rysów ani proporcji zdjęcia. Przy braku wykrytej
+                  twarzy ustaw brodę ręcznie.
+                </p>
+                <div className="head-reference">
+                  <img
+                    src={`/api/jobs/${job.id}/subject`}
+                    alt="Sylwetka do sprawdzenia pomiaru głowy"
                   />
-                </label>
-              ))}
-              <label>
-                Punkt odniesienia
-                <select
+                  <span
+                    className="measurement-line hair"
+                    style={{
+                      top: `${(measurementTop / job.head.sourceHeight) * 100}%`,
+                    }}
+                  >
+                    Włosy
+                  </span>
+                  <span
+                    className="measurement-line chin"
+                    style={{
+                      top: `${(measurementChin / job.head.sourceHeight) * 100}%`,
+                    }}
+                  >
+                    Broda
+                  </span>
+                </div>
+                <Range
+                  label="Czubek włosów (% wysokości zdjęcia)"
+                  min={0}
+                  max={99}
+                  step={0.1}
+                  value={
+                    Math.round(
+                      (measurementTop / job.head.sourceHeight) * 1000,
+                    ) / 10
+                  }
                   disabled={!editable}
-                  value={settings.composition.anchor}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     update({
                       ...settings,
-                      composition: {
-                        ...settings.composition,
-                        anchor: e.target.value as "face" | "subject",
+                      framing: {
+                        ...settings.framing,
+                        headTop: Math.round(
+                          (value / 100) * job.head!.sourceHeight,
+                        ),
+                      },
+                    })
+                  }
+                />
+                <Range
+                  label="Spód brody (% wysokości zdjęcia)"
+                  min={0.1}
+                  max={100}
+                  step={0.1}
+                  value={
+                    Math.round(
+                      (measurementChin / job.head.sourceHeight) * 1000,
+                    ) / 10
+                  }
+                  disabled={!editable}
+                  onChange={(value) =>
+                    update({
+                      ...settings,
+                      framing: {
+                        ...settings.framing,
+                        chin: Math.round(
+                          (value / 100) * job.head!.sourceHeight,
+                        ),
+                      },
+                    })
+                  }
+                />
+                <button
+                  disabled={!editable}
+                  onClick={() =>
+                    void render({
+                      ...settings,
+                      framing: {
+                        ...settings.framing,
+                        headTop: measurementTop,
+                        chin: measurementChin,
                       },
                     })
                   }
                 >
-                  <option value="face">Twarz, jeśli wykryta</option>
-                  <option value="subject">Sylwetka</option>
-                </select>
-              </label>
-              <label>
-                Kadrowanie
-                <select
-                  disabled={!editable}
-                  value={settings.composition.crop}
-                  onChange={(e) =>
-                    update({
-                      ...settings,
-                      composition: {
-                        ...settings.composition,
-                        crop: e.target.value as "contain" | "allow-bottom",
-                      },
-                    })
-                  }
-                >
-                  <option value="allow-bottom">
-                    Dopuszczaj przycięcie dołu
-                  </option>
-                  <option value="contain">Zmieszczaj sylwetkę</option>
-                </select>
-              </label>
+                  Zastosuj pomiar głowy
+                </button>
+              </details>
+            )}
+            <details>
+              <summary>Stałe reguły układu</summary>
+              <p className="hint">
+                Gradient: 1080 × 1080 px, x = 0, y = 120. Czubek głowy: y = 240.
+                Prawy skraj sylwetki: x = 1224. Dół sylwetki: y = 1200. Głowa:
+                docelowo 30%, maksymalnie 45% widocznej sylwetki.
+              </p>
             </details>
           </section>
           <section>
@@ -479,6 +438,23 @@ function App() {
                 Preset z dostarczonych ustawień. Sprawdź efekt na zdjęciu
                 prelegenta. Filtry nie zmieniają tła.
               </p>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={settings.filters.denoise}
+                  disabled={!editable}
+                  onChange={(e) =>
+                    update({
+                      ...settings,
+                      filters: {
+                        ...settings.filters,
+                        denoise: e.target.checked,
+                      },
+                    })
+                  }
+                />
+                Delikatnie zmniejsz ziarnistość
+              </label>
               {(Object.keys(labels) as (keyof typeof labels)[]).map((key) => (
                 <Range
                   key={key}
@@ -542,20 +518,45 @@ function App() {
               <h2>Podgląd wyniku</h2>
               <span className="badge">4:3 · 1600 × 1200 px</span>
             </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={guides}
+                onChange={(e) => setGuides(e.target.checked)}
+              />
+              Pokaż prowadnice (nie pojawią się w PNG)
+            </label>
             <div className="preview">
               {job?.hasPreview ? (
                 <img
                   src={`/api/jobs/${job.id}/preview?v=${job.revision}`}
                   alt="Podgląd gotowego kadru prelegenta"
                 />
+              ) : gradientPreview ? (
+                <img
+                  src={gradientPreview}
+                  alt="Stały układ tła przed dodaniem prelegenta"
+                />
               ) : (
                 <div className="empty">
-                  <span aria-hidden="true">▧</span>
-                  <p>Tu pojawi się przygotowany kadr</p>
-                  <p className="hint">
-                    Dodaj jedno zdjęcie prelegenta.
-                  </p>
+                  <p>Dodaj jedno zdjęcie prelegenta.</p>
                 </div>
+              )}
+              {guides && (
+                <svg
+                  className="layout-guides"
+                  viewBox="0 0 1600 1200"
+                  aria-hidden="true"
+                >
+                  <rect x="0" y="120" width="1080" height="1080" />
+                  <path d="M0 240 H1600 M1224 0 V1200" />
+                  <text x="16" y="225">
+                    Czubek głowy
+                  </text>
+                  <text x="1240" y="50">
+                    Prawy skraj
+                  </text>
+                </svg>
               )}
             </div>
             <div role="status" aria-live="polite" className="status">
@@ -580,7 +581,8 @@ function App() {
               </ul>
             ) : null}
             {job?.state === "manual-review-required" &&
-              (job.analysis?.people ?? 0) <= 1 && (
+              (job.analysis?.people ?? 0) <= 1 &&
+              (!job.hasSubject || job.hasPreview) && (
                 <div className="notice">
                   <label className="check">
                     <input
@@ -698,9 +700,7 @@ function App() {
                 )}
               </>
             ) : (
-              job?.hasPreview && (
-                <p className="hint">PNG 1600 × 1200 · sRGB</p>
-              )
+              job?.hasPreview && <p className="hint">PNG 1600 × 1200 · sRGB</p>
             )}
           </section>
           {source && (
@@ -712,8 +712,8 @@ function App() {
         </div>
       </div>
       <footer>
-        Sprawdź włosy, dłonie i krawędzie ubrania przed użyciem grafiki. Preset
-        i kompozycja oczekują na kalibrację z zatwierdzonym materiałem.
+        Sprawdź włosy, dłonie i krawędzie ubrania przed użyciem grafiki.
+        Pomiar głowy i wygląd filtrów oceń na swoim zdjęciu źródłowym.
       </footer>
     </main>
   );

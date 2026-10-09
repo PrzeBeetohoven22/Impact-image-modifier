@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import type { Analysis } from "../shared/config.js";
 import { AppError } from "./errors.js";
+import { applyAlphaMask } from "./images.js";
 export interface BackgroundRemovalProvider {
   remove(image: Buffer): Promise<Buffer>;
 }
@@ -33,8 +34,7 @@ export class LocalBackgroundRemoval implements BackgroundRemovalProvider {
         },
       );
       const result = Buffer.from(await blob.arrayBuffer());
-      const { width, height } = await sharp(image).metadata();
-      return sharp(result).resize(width, height).png().toBuffer();
+      return applyAlphaMask(image, result);
     } catch {
       throw new AppError(
         "BACKGROUND_REMOVAL_FAILED",

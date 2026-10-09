@@ -10,6 +10,9 @@ import {
   outputFilename,
   MAX_UPLOAD,
   prepareGradient,
+  buildFixedBackground,
+  measureHead,
+  applyAlphaMask,
 } from "../src/server/images";
 import {
   DEFAULT_COMPOSITION,
@@ -143,22 +146,49 @@ describe("matting and composition", () => {
       code: "NO_SUBJECT",
     });
   });
-  it("anchors the face and gives zoom and offsets consistent pixel coordinates", () => {
-    const b = { x: 90, y: 40, width: 320, height: 640 };
-    const c = { ...DEFAULT_COMPOSITION, minimumHeadMargin: 0 };
-    const base = placement(b, face, c, DEFAULT_FRAMING);
-    expect(
-      base.top + (face.y + face.height / 2 - b.y) * base.scale,
-    ).toBeCloseTo(c.faceTargetY, 0);
-    expect(
-      base.left + (face.x + face.width / 2 - b.x) * base.scale,
-    ).toBeCloseTo(c.faceTargetX, 0);
-    const moved = placement(b, face, c, { zoom: 1, x: 100, y: 80 });
-    expect(moved.left - base.left).toBe(100);
-    expect(moved.top - base.top).toBe(80);
-    expect(placement(b, face, c, { zoom: 2, x: 0, y: 0 }).width).toBe(
-      base.width * 2,
+  it("keeps the head level and scales tall or short sources proportionally", () => {
+    const head = { top: 40, chin: 220, sourceWidth: 500, sourceHeight: 1400 };
+    const tall = placement(
+      { x: 90, y: 40, width: 320, height: 1100 },
+      head,
+      DEFAULT_COMPOSITION,
+      DEFAULT_FRAMING,
     );
+    expect(tall.top).toBe(240);
+    expect(tall.scale).toBeCloseTo(1.6);
+    expect(tall.headRatio).toBeCloseTo(0.3);
+    const short = placement(
+      { x: 90, y: 40, width: 320, height: 500 },
+      head,
+      DEFAULT_COMPOSITION,
+      DEFAULT_FRAMING,
+    );
+    expect(short.headRatio).toBeCloseTo(0.36);
+    expect(short.top + short.height).toBe(1200);
+    expect(() =>
+      placement(
+        { x: 90, y: 40, width: 320, height: 300 },
+        head,
+        DEFAULT_COMPOSITION,
+        DEFAULT_FRAMING,
+      ),
+    ).toThrow(/45%/);
+  });
+  it("requires a chin measurement when no face was detected", async () => {
+    const head = await measureHead(await subjectFixture(), {
+      people: 0,
+      faces: [],
+      warnings: [],
+    });
+    expect(head.chin).toBeNull();
+    expect(() =>
+      placement(
+        { x: 90, y: 40, width: 320, height: 640 },
+        head,
+        DEFAULT_COMPOSITION,
+        DEFAULT_FRAMING,
+      ),
+    ).toThrow(/brody/);
   });
   it("preserves alpha and produces lower saturation with the screenshot preset", async () => {
     const source = await subjectFixture();
@@ -197,35 +227,185 @@ describe("matting and composition", () => {
     const layer = await sharp(out.layer).metadata();
     expect(layer.hasAlpha).toBe(true);
   });
-  it("rejects an entirely invisible framing and warns about head cropping", async () => {
-    const source = await subjectFixture(),
-      bg = await gradientFixture();
-    const c = {
-      ...DEFAULT_COMPOSITION,
-      targetX: 1600,
-      anchor: "subject" as const,
-    };
+  it("rejects impossible head measurements without stretching or extending the source", async () => {
     await expect(
-      compose(source, bg, c, { zoom: 0.5, x: 800, y: 0 }, NEUTRAL_PRESET, {
-        people: 1,
-        faces: [face],
-        warnings: [],
-      }),
-    ).rejects.toMatchObject({ code: "SUBJECT_OUTSIDE" });
-    const r = await compose(
-      source,
-      bg,
-      DEFAULT_COMPOSITION,
-      { zoom: 1, x: 0, y: -400 },
-      NEUTRAL_PRESET,
-      { people: 1, faces: [face], warnings: [] },
-    );
-    expect(r.warnings.join(" ")).toContain("Twarz jest przycięta");
+      compose(
+        await subjectFixture(),
+        await gradientFixture(),
+        DEFAULT_COMPOSITION,
+        { ...DEFAULT_FRAMING, chin: 10 },
+        NEUTRAL_PRESET,
+        { people: 1, faces: [face], warnings: [] },
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_HEAD_MEASUREMENT" });
+    await expect(
+      compose(
+        await subjectFixture(),
+        await gradientFixture(),
+        DEFAULT_COMPOSITION,
+        { ...DEFAULT_FRAMING, chin: 42 },
+        NEUTRAL_PRESET,
+        { people: 1, faces: [face], warnings: [] },
+      ),
+    ).rejects.toMatchObject({ code: "HEAD_MEASUREMENT_TOO_SMALL" });
+    await expect(
+      compose(
+        await subjectFixture(),
+        await gradientFixture(),
+        DEFAULT_COMPOSITION,
+        { ...DEFAULT_FRAMING, headTop: 50, chin: 220 },
+        NEUTRAL_PRESET,
+        { people: 1, faces: [face], warnings: [] },
+      ),
+    ).rejects.toMatchObject({ code: "HEAD_TOP_MISMATCH" });
   });
   it("sanitizes names without paths or header injection", () => {
     expect(outputFilename("Łukasz Żółć /../\r\n")).toBe(
       "impact-speaker-lukasz-zolc.png",
     );
     expect(outputFilename("///")).toBe("impact-speaker-speaker.png");
+  });
+});
+
+describe("approved fixed composition", () => {
+  it("takes only the generated alpha mask and retains source RGB and existing transparency", async () => {
+    const source = await sharp({
+      create: {
+        width: 300,
+        height: 300,
+        channels: 4,
+        background: { r: 50, g: 90, b: 150, alpha: 0.5 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const cutout = await sharp({
+      create: {
+        width: 150,
+        height: 150,
+        channels: 4,
+        background: { r: 230, g: 10, b: 40, alpha: 0.5 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const original = await sharp(source).ensureAlpha().raw().toBuffer();
+    const actual = await sharp(await applyAlphaMask(source, cutout))
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    expect(
+      actual.every((value, index) =>
+        index % 4 === 3
+          ? value === Math.round((original[index] * original[index]) / 255)
+          : value === original[index],
+      ),
+    ).toBe(true);
+  });
+  it("optional mild denoising retains alpha and translucent cutout edge colors", async () => {
+    const data = Buffer.alloc(12 * 12 * 4);
+    for (let i = 0; i < 12 * 12; i++) {
+      data.set([80, 100, 120, i % 12 === 0 ? 100 : 255], i * 4);
+    }
+    data.set([230, 230, 230, 255], (6 * 12 + 6) * 4);
+    const image = await sharp(data, {
+      raw: { width: 12, height: 12, channels: 4 },
+    })
+      .png()
+      .toBuffer();
+    const output = await sharp(
+      await applyFilters(image, { ...NEUTRAL_PRESET, denoise: true }),
+    )
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    expect([
+      ...output.subarray((6 * 12 + 6) * 4, (6 * 12 + 6) * 4 + 3),
+    ]).toEqual([80, 100, 120]);
+    for (let i = 3; i < data.length; i += 4) expect(output[i]).toBe(data[i]);
+    expect([...output.subarray(0, 4)]).toEqual([80, 100, 120, 100]);
+  });
+  it("uses the complete original square unchanged in color, with white above and to the right", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile(
+      new URL(
+        "../reference_assets/impact-gradient-original.png",
+        import.meta.url,
+      ),
+    );
+    const background = await readFile(
+      new URL("../assets/impact-gradient-1600x1200.png", import.meta.url),
+    );
+    expect(background.equals(await buildFixedBackground(source))).toBe(true);
+    const expected = await sharp(source)
+      .resize(1080, 1080)
+      .removeAlpha()
+      .raw()
+      .toBuffer();
+    const actual = await sharp(background)
+      .extract({ left: 0, top: 120, width: 1080, height: 1080 })
+      .removeAlpha()
+      .raw()
+      .toBuffer();
+    expect(actual.equals(expected)).toBe(true);
+    for (const region of [
+      { left: 0, top: 0, width: 1600, height: 120 },
+      { left: 1080, top: 120, width: 520, height: 1080 },
+    ]) {
+      const pixels = await sharp(background)
+        .extract(region)
+        .removeAlpha()
+        .raw()
+        .toBuffer();
+      expect(pixels.every((value) => value === 255)).toBe(true);
+    }
+  });
+  it.each([30, 35, 45])(
+    "anchors the visible right edge and bottom with %i%% head height",
+    async (percent) => {
+      const out = await compose(
+        await subjectFixture(),
+        await gradientFixture(),
+        DEFAULT_COMPOSITION,
+        {
+          ...DEFAULT_FRAMING,
+          headRatio: percent / 100,
+          headTop: 40,
+          chin: 220,
+        },
+        NEUTRAL_PRESET,
+        { people: 1, faces: [face], warnings: [] },
+      );
+      const bounds = await subjectBounds(out.layer);
+      expect(bounds.y).toBe(240);
+      expect(bounds.x + bounds.width).toBe(1224);
+      expect(bounds.y + bounds.height).toBe(1200);
+      expect(out.layout.headRatio).toBeCloseTo(percent / 100);
+    },
+  );
+  it("ignores a wide hand below the cropped frame when anchoring the visible right edge", async () => {
+    const source = await sharp(
+      Buffer.from(
+        '<svg width="1400" height="1400"><rect x="200" y="40" width="180" height="180" fill="#b89478"/><rect x="130" y="220" width="320" height="1000" fill="#273b65"/><rect x="450" y="1100" width="800" height="70" fill="#b89478"/></svg>',
+      ),
+    )
+      .png()
+      .toBuffer();
+    const out = await compose(
+      source,
+      await gradientFixture(),
+      DEFAULT_COMPOSITION,
+      { ...DEFAULT_FRAMING, headTop: 40, chin: 220 },
+      NEUTRAL_PRESET,
+      {
+        people: 1,
+        faces: [{ x: 200, y: 50, width: 180, height: 160 }],
+        warnings: [],
+      },
+    );
+    const bounds = await subjectBounds(out.layer);
+    expect(bounds.x + bounds.width).toBe(1224);
+    expect(bounds.width).toBeLessThan(550);
+    expect(bounds.y + bounds.height).toBe(1200);
   });
 });

@@ -23,6 +23,7 @@ import {
   outputFilename,
   MAX_UPLOAD,
   prepareGradient,
+  measureHead,
 } from "./images.js";
 import { AppError, publicError } from "./errors.js";
 import {
@@ -235,12 +236,15 @@ export function createApp(options: AppOptions = {}) {
       j.settings.framing,
       j.settings.filters,
       j.analysis,
+      j.view.head,
     );
     if (j.cancelled) return;
     j.png = r.png;
     j.layer = r.layer;
     j.view.hasPreview = true;
     j.view.revision++;
+    j.view.layout = r.layout;
+    j.view.error = undefined;
     j.view.warnings = [...j.analysis.warnings, ...r.warnings];
     j.view.state =
       j.view.warnings.length && !j.reviewed
@@ -279,13 +283,15 @@ export function createApp(options: AppOptions = {}) {
       j.subject = await (
         j.mode === "transparent" ? transparent : background
       ).remove(j.source);
+      j.view.hasSubject = true;
+      j.view.head = await measureHead(j.subject, j.analysis);
       j.source = undefined;
       if (j.cancelled) return;
       j.view.error = undefined;
       await render(j);
     } catch (e) {
       if (!j.cancelled) {
-        j.view.state = "failed";
+        j.view.state = j.subject ? "manual-review-required" : "failed";
         j.view.error = publicError(e);
         j.source = undefined;
       }
@@ -308,6 +314,12 @@ export function createApp(options: AppOptions = {}) {
   });
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
   app.post("/api/gradient", upload.single("gradient"), async (req, res) => {
+    if (options.defaultGradient)
+      throw new AppError(
+        "BACKGROUND_LOCKED",
+        "Tło marki ma stały gradient i pozycję. Nie można go zmienić.",
+        409,
+      );
     if (!req.file)
       throw new AppError(
         "UNSUPPORTED_TYPE",
@@ -378,6 +390,7 @@ export function createApp(options: AppOptions = {}) {
         canvaState: "unconfigured",
         warnings: [],
         hasPreview: false,
+        hasSubject: false,
         filename: outputFilename(name),
         expiresAt: Date.now() + ttl,
         revision: 0,
@@ -388,6 +401,12 @@ export function createApp(options: AppOptions = {}) {
     res.status(202).json(j.view);
   });
   app.get("/api/jobs/:id", (req, res) => res.json(job(req, res).view));
+  app.get("/api/jobs/:id/subject", (req, res) => {
+    const j = job(req, res);
+    if (!j.subject)
+      throw new AppError("NOT_READY", "Poczekaj na usunięcie tła.", 409);
+    res.type("png").send(j.subject);
+  });
   app.get("/api/jobs/:id/preview", (req, res) => {
     const j = job(req, res);
     if (!j.png)
@@ -448,6 +467,12 @@ export function createApp(options: AppOptions = {}) {
       throw new AppError(
         "MULTIPLE_PEOPLE",
         "Dla kilku osób przygotuj osobne zdjęcie z jednym prelegentem.",
+      );
+    if (j.subject && !j.png)
+      throw new AppError(
+        "HEAD_MEASUREMENT_REQUIRED",
+        "Najpierw zastosuj poprawny pomiar głowy i przygotuj podgląd.",
+        409,
       );
     j.reviewed = true;
     j.view.error = undefined;
