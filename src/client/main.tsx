@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Filters, JobView, RenderSettings } from "../shared/config";
 import {
@@ -7,6 +7,8 @@ import {
   IMPACT_PRESET,
   HEAD_PROPORTIONS,
   NEUTRAL_PRESET,
+  OUTPUT_FILENAME,
+  SUBJECT_TOP,
 } from "../shared/config";
 import "./styles.css";
 type Status = {
@@ -21,6 +23,7 @@ const stateLabels: Record<JobView["state"], string> = {
   validating: "Sprawdzanie zdjęcia i liczby osób",
   "removing-background": "Usuwanie tła",
   composing: "Przygotowywanie kadru",
+  "detecting-objects": "Sprawdzanie dodatkowych obiektów",
   "creating-canva-design": "Tworzenie projektu Canva",
   exporting: "Eksport z Canva",
   complete: "PNG gotowy",
@@ -70,6 +73,7 @@ function Range({
   step = 1,
   onChange,
   disabled = false,
+  showValue = true,
 }: {
   label: string;
   value: number;
@@ -78,9 +82,10 @@ function Range({
   step?: number;
   onChange: (v: number) => void;
   disabled?: boolean;
+  showValue?: boolean;
 }) {
   return (
-    <label className="range">
+    <label className={`range${showValue ? "" : " slider-only"}`}>
       <span>{label}</span>
       <input
         type="range"
@@ -92,19 +97,21 @@ function Range({
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      <input
-        type="number"
-        aria-label={`${label} — wartość`}
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => {
-          const v = Number(e.target.value);
-          if (Number.isFinite(v) && v >= min && v <= max) onChange(v);
-        }}
-      />
+      {showValue && (
+        <input
+          type="number"
+          aria-label={`${label} — wartość`}
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (Number.isFinite(v) && v >= min && v <= max) onChange(v);
+          }}
+        />
+      )}
     </label>
   );
 }
@@ -117,9 +124,9 @@ function App() {
   const [settings, setSettings] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [confirm, setConfirm] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [guides, setGuides] = useState(true);
+  const [guides, setGuides] = useState(false);
+  const lastAttempt = useRef<RenderSettings | undefined>(undefined);
   useEffect(() => {
     void api<Status>("/api/status")
       .then((value) => {
@@ -175,7 +182,6 @@ function App() {
     await action(async () => {
       if (job) await api(`/api/jobs/${job.id}`, { method: "DELETE" });
       setJob(undefined);
-      setConfirm(false);
       setSettings(initial());
       setDirty(false);
       const data = new FormData();
@@ -188,19 +194,45 @@ function App() {
       setJob(await api(`/api/jobs/${job!.id}/render`, json(next)));
       setSettings(next);
       setDirty(false);
-      setConfirm(false);
     });
   }
   function update(next: RenderSettings) {
     setSettings(next);
     setDirty(true);
-    setConfirm(false);
   }
   const processing = Boolean(
     job &&
     !["complete", "failed", "manual-review-required"].includes(job.state),
   );
   const editable = Boolean(job?.hasSubject) && !busy && !processing;
+  useEffect(() => {
+    if (!dirty || !editable || lastAttempt.current === settings) return;
+    const timer = setTimeout(() => {
+      lastAttempt.current = settings;
+      void render(settings);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [dirty, editable, settings]);
+  async function download() {
+    if (!job?.hasPreview || dirty) return;
+    await action(async () => {
+      const response = await fetch(`/api/jobs/${job.id}/download`);
+      if (!response.ok) {
+        const body = await response
+          .json()
+          .catch(() => ({ message: "Nie udało się pobrać PNG." }));
+        throw new Error(body.message);
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = OUTPUT_FILENAME;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    });
+  }
   const measurementTop = settings.framing.headTop ?? job?.head?.top ?? 0;
   const measurementChin =
     settings.framing.chin ??
@@ -224,26 +256,15 @@ function App() {
         </div>
       )}
       <div className="workspace">
-        <aside>
+        <aside className="controls">
           <section className="preparation-panel">
             <h2>
               <span className="step">1</span> Przygotowanie zdjęcia na Impact'27
             </h2>
-            <p className="hint">
-              Wybrany gradient Impact jest gotowy do użycia. Kwadrat ma stałą
-              pozycję; kolory i tło pozostają takie same dla każdego prelegenta.
-            </p>
-            {gradientPreview && (
-              <img
-                className="gradient-preview"
-                src={gradientPreview}
-                alt="Podgląd stałego tła"
-              />
-            )}
             <form onSubmit={(e) => void start(e)}>
               <label className="file impact-upload">
-                DODAJ ZDJĘCIE NA IMPACT'27
                 <input
+                  aria-label="Wybierz zdjęcie"
                   type="file"
                   required
                   accept="image/png,image/jpeg,image/webp"
@@ -251,10 +272,21 @@ function App() {
                   onChange={(e) => setPhoto(e.target.files?.[0])}
                 />
               </label>
-              <p className="hint">
-                JPEG, PNG lub WebP · do 20 MB · minimum 300 px na krótszym boku.
-                Pliki są usuwane z pamięci po 20 minutach.
-              </p>
+              <div className="upload-detail">
+                {gradientPreview && (
+                  <img
+                    className="gradient-preview"
+                    src={gradientPreview}
+                    alt="Podgląd stałego tła"
+                  />
+                )}
+                <p className="hint">
+                  JPEG, PNG lub WebP · do 20 MB.
+                  <br />
+                  Pionowe, poziome i kwadratowe zdjęcia; minimum 300 px na
+                  krótszym boku.
+                </p>
+              </div>
               <div className="generate-action">
                 <button
                   className="primary prepare-cta"
@@ -269,19 +301,16 @@ function App() {
               </div>
             </form>
           </section>
-          <section>
+          <section className="framing-panel">
             <h2>
               <span className="step">2</span> Kadrowanie
             </h2>
-            <p className="hint">
-              Czubek głowy, prawy skraj i dolna krawędź są stałe. Zmieniamy
-              wyłącznie proporcjonalne powiększenie i przycięcie dołu zdjęcia.
-            </p>
             <Range
-              label="Wysokość głowy (% sylwetki)"
+              label="WIELKOŚĆ SYLWETKI"
               min={HEAD_PROPORTIONS.min * 100}
               max={HEAD_PROPORTIONS.max * 100}
               step={1}
+              showValue={false}
               value={Math.round(settings.framing.headRatio * 100)}
               disabled={!editable}
               onChange={(value) =>
@@ -291,27 +320,48 @@ function App() {
                 })
               }
             />
-            {job?.layout && (
-              <p className="hint">
-                Głowa w wyniku: {(job.layout.headRatio * 100).toFixed(1)}%
-                wysokości widocznej sylwetki.
-              </p>
-            )}
+            <Range
+              label="WYSOKOŚĆ SYLWETKI"
+              min={0}
+              max={100}
+              showValue={false}
+              value={Math.round(
+                (100 * (SUBJECT_TOP.max - settings.composition.headTop)) /
+                  (SUBJECT_TOP.max - SUBJECT_TOP.min),
+              )}
+              disabled={!editable}
+              onChange={(value) =>
+                update({
+                  ...settings,
+                  composition: {
+                    ...settings.composition,
+                    headTop: Math.round(
+                      SUBJECT_TOP.max -
+                        (value / 100) * (SUBJECT_TOP.max - SUBJECT_TOP.min),
+                    ),
+                  },
+                })
+              }
+            />
             <div className="buttons">
-              <button disabled={!editable} onClick={() => void render()}>
-                Aktualizuj podgląd{dirty ? " •" : ""}
-              </button>
               <button
                 disabled={!editable}
                 onClick={() =>
-                  void render({ ...settings, framing: { ...DEFAULT_FRAMING } })
+                  void render({
+                    ...settings,
+                    framing: { ...DEFAULT_FRAMING },
+                    composition: { ...DEFAULT_COMPOSITION },
+                  })
                 }
               >
                 Resetuj kadr
               </button>
             </div>
+            <p className="hint">Podgląd aktualizuje się automatycznie.</p>
+          </section>
+          <section className="advanced-panel">
             {job?.hasSubject && job.head && (
-              <details open={job.error?.code === "HEAD_MEASUREMENT_REQUIRED"}>
+              <details>
                 <summary>Pomiar głowy: włosy–broda</summary>
                 <p className="hint">
                   Sprawdź czubek włosów i spód brody. Linie służą do kadrowania;
@@ -403,17 +453,8 @@ function App() {
                 </button>
               </details>
             )}
-            <details>
-              <summary>Stałe reguły układu</summary>
-              <p className="hint">
-                Gradient: 1080 × 1080 px, x = 0, y = 120. Czubek głowy: y = 240.
-                Prawy skraj sylwetki: x = 1224. Dół sylwetki: y = 1200. Głowa:
-                docelowo 45%, zwykle 30–55% widocznej sylwetki. Dla ciasnego
-                źródła dopuszczamy do 65%, z ostrzeżeniem.
-              </p>
-            </details>
           </section>
-          <section>
+          <section className="advanced-panel">
             <details>
               <summary>Filtry sylwetki</summary>
               <p className="hint">
@@ -500,14 +541,32 @@ function App() {
               <h2>Podgląd wyniku</h2>
               <span className="badge">4:3 · 1600 × 1200 px</span>
             </div>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={guides}
-                onChange={(e) => setGuides(e.target.checked)}
-              />
-              Pokaż prowadnice (nie pojawią się w PNG)
-            </label>
+            <div className="preview-toolbar">
+              <button
+                className="download-cta"
+                disabled={!job?.hasPreview || dirty || busy || processing}
+                onClick={() => void download()}
+              >
+                POBIERZ PNG
+              </button>
+              <button aria-pressed={guides} onClick={() => setGuides(!guides)}>
+                Prowadnice
+              </button>
+              {job && (
+                <button
+                  disabled={busy || processing}
+                  onClick={() =>
+                    void action(async () => {
+                      await api(`/api/jobs/${job.id}`, { method: "DELETE" });
+                      setJob(undefined);
+                      setDirty(false);
+                    })
+                  }
+                >
+                  Usuń zdjęcie
+                </button>
+              )}
+            </div>
             <div className="preview">
               {job?.hasPreview ? (
                 <img
@@ -531,8 +590,10 @@ function App() {
                   aria-hidden="true"
                 >
                   <rect x="0" y="120" width="1080" height="1080" />
-                  <path d="M0 240 H1600 M1224 0 V1200" />
-                  <text x="16" y="225">
+                  <path
+                    d={`M0 ${settings.composition.headTop} H1600 M1224 0 V1200`}
+                  />
+                  <text x="16" y={settings.composition.headTop - 15}>
                     Czubek głowy
                   </text>
                   <text x="1240" y="50">
@@ -548,142 +609,67 @@ function App() {
                   ? stateLabels[job.state]
                   : "Wybierz zdjęcie prelegenta, aby rozpocząć."}
             </div>
-            {dirty && (
+            {dirty && <p className="notice">Aktualizowanie podglądu…</p>}
+            {job?.error && <p className="notice error">{job.error.message}</p>}
+            {job?.objectReport?.objects.length &&
+            job.objectDecision === "pending" ? (
+              <div className="object-notice" role="alert">
+                <strong>
+                  WYKRYTO OBIEKT NIE BĘDĄCY SYLWETKĄ, CZY ZGADASZ SIĘ NA RETUSZ
+                  PRZY UŻYCIU AI?
+                </strong>
+                <p>
+                  Możliwy obiekt:{" "}
+                  {[
+                    ...new Set(job.objectReport.objects.map((o) => o.label)),
+                  ].join(", ")}
+                  . Retusz AI nie jest wykonywany w tej wersji. Twoja odpowiedź
+                  dotyczy tylko tego zdjęcia; pobieranie pozostaje dostępne.
+                </p>
+                <div className="buttons">
+                  {(["accepted", "declined"] as const).map((decision) => (
+                    <button
+                      key={decision}
+                      disabled={busy}
+                      onClick={() =>
+                        void action(async () => {
+                          setJob(
+                            await api(
+                              `/api/jobs/${job.id}/object-decision`,
+                              json({ decision }),
+                            ),
+                          );
+                        })
+                      }
+                    >
+                      {decision === "accepted" ? "ZGADZAM SIĘ" : "BEZ RETUSZU"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {job?.objectDecision === "accepted" && (
               <p className="notice">
-                Ustawienia kadru lub filtrów zmieniły się. Aktualizuj podgląd
-                przed pobraniem.
+                Zgoda zapisana dla tego zdjęcia. Retusz AI nie jest uruchamiany
+                w tej wersji.
               </p>
             )}
-            {job?.error && <p className="notice error">{job.error.message}</p>}
-            {job?.warnings.length ? (
-              <ul className="notice">
-                {job.warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
-                ))}
-              </ul>
-            ) : null}
-            {job?.state === "manual-review-required" &&
-              (job.analysis?.people ?? 0) <= 1 &&
-              (!job.hasSubject || job.hasPreview) && (
-                <div className="notice">
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={confirm}
-                      onChange={(e) => setConfirm(e.target.checked)}
-                    />
-                    Sprawdziłem zdjęcie: jedna osoba, poprawna sylwetka i
-                    widoczna głowa.
-                  </label>
-                  <button
-                    disabled={!confirm || busy || dirty}
-                    onClick={() =>
-                      void action(async () => {
-                        setJob(
-                          await api(
-                            `/api/jobs/${job.id}/review`,
-                            json({ confirmSinglePerson: true }),
-                          ),
-                        );
-                      })
-                    }
-                  >
-                    Potwierdź i kontynuuj
-                  </button>
-                </div>
-              )}
-          </section>
-          <section className="download-panel">
-            <h2>
-              <span className="step">3</span> Pobieranie
-            </h2>
-            <div className="buttons">
-              {job?.state === "complete" && !dirty ? (
-                <a
-                  className="button primary"
-                  href={`/api/jobs/${job.id}/download`}
-                >
-                  Pobierz PNG
-                </a>
-              ) : (
-                <button disabled>Pobierz PNG</button>
-              )}
-              {status?.canvaConfigured && (
-                <>
-                  <a className="button" href="/api/canva/connect">
-                    {status.canvaConnected
-                      ? "Połącz ponownie z Canva"
-                      : "Połącz z Canva"}
-                  </a>
-                  <button
-                    disabled={
-                      !status.canvaConnected ||
-                      job?.state !== "complete" ||
-                      busy ||
-                      dirty ||
-                      job.canvaState === "complete"
-                    }
-                    onClick={() =>
-                      void action(async () => {
-                        setJob(
-                          await api(`/api/jobs/${job!.id}/canva`, {
-                            method: "POST",
-                          }),
-                        );
-                      })
-                    }
-                  >
-                    Utwórz projekt Canva i eksportuj
-                  </button>
-                </>
-              )}
-              {job && (
-                <button
-                  disabled={busy || processing}
-                  onClick={() =>
-                    void action(async () => {
-                      await api(`/api/jobs/${job.id}`, { method: "DELETE" });
-                      setJob(undefined);
-                      setConfirm(false);
-                    })
-                  }
-                >
-                  Usuń zdjęcie z serwera
-                </button>
-              )}
-            </div>
-            {status?.canvaConfigured ? (
-              <>
-                {job?.canvaError && (
-                  <p className="notice error">{job.canvaError.message}</p>
-                )}
-                {job?.canvaDesign && (
-                  <p>
-                    <a
-                      href={job.canvaDesign.editUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Otwórz edytowalny projekt Canva ↗
-                    </a>
-                  </p>
-                )}
-                {job?.canvaState === "complete" ? (
-                  <p className="hint">
-                    Projekt Canva utworzony. Pobieranie zawiera zweryfikowany
-                    eksport Canva.
-                  </p>
-                ) : (
-                  job?.hasPreview && (
-                    <p className="hint">
-                      Podgląd i pobieranie przedstawiają lokalny PNG.
-                    </p>
-                  )
-                )}
-              </>
-            ) : (
-              job?.hasPreview && <p className="hint">PNG 1600 × 1200 · sRGB</p>
+            {job?.objectReport?.message && (
+              <details className="quality-notes">
+                <summary>Wykrywanie obiektów</summary>
+                <p className="hint">{job.objectReport.message}</p>
+              </details>
             )}
+            {job?.warnings.length ? (
+              <details className="quality-notes">
+                <summary>Uwagi do zdjęcia ({job.warnings.length})</summary>
+                <ul className="notice">
+                  {job.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </section>
           {source && (
             <details className="source">
@@ -693,10 +679,6 @@ function App() {
           )}
         </div>
       </div>
-      <footer>
-        Sprawdź włosy, dłonie i krawędzie ubrania przed użyciem grafiki. Pomiar
-        głowy i wygląd filtrów oceń na swoim zdjęciu źródłowym.
-      </footer>
     </main>
   );
 }

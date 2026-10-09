@@ -9,11 +9,7 @@ import type {
   HeadMeasurement,
   LayoutMetrics,
 } from "../shared/config.js";
-import {
-  BACKGROUND_LAYOUT,
-  HEAD_PROPORTIONS,
-  OUTPUT,
-} from "../shared/config.js";
+import { BACKGROUND_LAYOUT, OUTPUT } from "../shared/config.js";
 import { AppError } from "./errors.js";
 export const MAX_UPLOAD = 20 * 1024 * 1024;
 export const MAX_PIXELS = 40_000_000;
@@ -245,37 +241,33 @@ export function placement(
 ) {
   const headTop = f.headTop ?? head.top,
     chin = f.chin ?? head.chin;
-  if (chin === null)
-    throw new AppError(
-      "HEAD_MEASUREMENT_REQUIRED",
-      "Ustaw linię brody na wyciętej sylwetce i kliknij „Zastosuj pomiar głowy”.",
-    );
-  if (headTop < bounds.y || chin <= headTop || chin > bounds.y + bounds.height)
+  const measuredChin =
+    chin ?? headTop + (bounds.y + bounds.height - headTop) * 0.3;
+  if (
+    headTop < bounds.y ||
+    measuredChin <= headTop ||
+    measuredChin > bounds.y + bounds.height
+  )
     throw new AppError(
       "INVALID_HEAD_MEASUREMENT",
       "Linia brody musi być poniżej czubka włosów i mieścić się w zdjęciu.",
     );
   const visibleHeight = c.targetBottom - c.headTop;
-  const headHeight = chin - headTop;
+  const headHeight = measuredChin - headTop;
   // Increase only when the source ends before the bottom of the target canvas.
   // A full-body source is enlarged to the head target and cropped below the frame.
   const scale = Math.max(
-    (visibleHeight * f.headRatio) / headHeight,
+    Math.min((960 * f.headRatio) / headHeight, visibleHeight / headHeight),
     visibleHeight / (bounds.y + bounds.height - headTop),
   );
   const headRatio = (headHeight * scale) / visibleHeight;
-  if (headRatio > HEAD_PROPORTIONS.sourceLimit + 1e-6)
-    throw new AppError(
-      "SOURCE_TOO_TIGHT",
-      "Zdjęcie jest zbyt ciasno wykadrowane: głowa przekroczyłaby 65% sylwetki, czyli limit 55% wraz z tolerancją 10 punktów procentowych. Wybierz zdjęcie z większą częścią tułowia.",
-    );
   return {
     top: Math.round(c.headTop - (headTop - bounds.y) * scale),
     width: Math.max(1, Math.round(bounds.width * scale)),
     height: Math.max(1, Math.ceil(bounds.height * scale)),
     scale,
     headTop,
-    chin,
+    chin: measuredChin,
     headRatio,
   };
 }
@@ -396,54 +388,93 @@ export async function compose(
     warnings.push(
       "Pomiar głowy jest szacunkowy. Sprawdź linie włosów i brody na wyciętej sylwetce; w razie potrzeby je popraw.",
     );
-  if (pos.headRatio > f.headRatio + 0.005)
+  if (
+    (bounds.y + bounds.height - pos.headTop) *
+      ((960 * f.headRatio) / (pos.chin - pos.headTop)) <
+    c.targetBottom - c.headTop
+  )
     warnings.push(
-      `Aby sylwetka dotykała dołu, głowa zajmuje ${Math.round(pos.headRatio * 100)}% jej wysokości. Źródło nie pozwala uzyskać ${Math.round(f.headRatio * 100)}%.`,
-    );
-  if (pos.headRatio > HEAD_PROPORTIONS.max + 1e-6)
-    warnings.push(
-      `Ciasny kadr źródłowy: zastosowano tolerancję powyżej 55%. Głowa zajmuje ${(pos.headRatio * 100).toFixed(1)}% sylwetki; dopuszczalne maksimum wynosi 65%. Sprawdź proporcje przed pobraniem.`,
+      "Krótki kadr źródłowy został powiększony tak, aby sylwetka sięgała dolnej krawędzi.",
     );
   if (pos.scale > 1.4)
     warnings.push(
       "Zdjęcie wymaga znacznego powiększenia. Rozważ plik o wyższej rozdzielczości.",
     );
-  if (
-    pos.width * pos.height > 24_000_000 ||
-    Math.max(pos.width, pos.height) > 16_000
-  )
+  if (pos.scale > 100)
     throw new AppError(
       "HEAD_MEASUREMENT_TOO_SMALL",
       "Zaznacz całą głowę od czubka włosów do brody. Ten pomiar wymagałby nadmiernego powiększenia zdjęcia.",
     );
-  const resized = await sharp(subject)
+  // Crop in source coordinates first. Wide panoramas and long full-body photos
+  // must not allocate a huge upscaled image merely to discard most of it.
+  const cropY = bounds.y + Math.max(0, Math.floor(-pos.top / pos.scale));
+  const cropBottom = Math.min(
+    bounds.y + bounds.height,
+    bounds.y + Math.ceil((OUTPUT.height - pos.top) / pos.scale),
+  );
+  const sourceVertical = await sharp(subject)
     .extract({
       left: bounds.x,
-      top: bounds.y,
+      top: cropY,
       width: bounds.width,
-      height: bounds.height,
+      height: cropBottom - cropY,
     })
-    .resize(pos.width, pos.height)
     .png()
     .toBuffer();
-  const sy = Math.max(0, -pos.top),
-    dy = Math.max(0, pos.top);
-  const height = Math.min(pos.height - sy, OUTPUT.height - dy);
+  const sourceVisible = await subjectBounds(sourceVertical);
+  const sourceRight = sourceVisible.x + sourceVisible.width;
+  let cropX = Math.max(0, Math.floor(sourceRight - c.subjectRight / pos.scale));
+  let cropRight = sourceRight;
+  const face = analysis.faces.length === 1 ? analysis.faces[0] : undefined;
+  if (face && cropX > face.x - bounds.x - face.width * 0.3) {
+    // A wide foreground (e.g. a desk) must not push the actual face out of frame.
+    // Reframe the source window around the face; pixels are cropped, never generated.
+    const sourceWindow = Math.min(
+      sourceRight,
+      Math.ceil(c.subjectRight / pos.scale),
+    );
+    cropX = Math.max(
+      0,
+      Math.min(
+        sourceRight - sourceWindow,
+        Math.floor(face.x + face.width / 2 - bounds.x - sourceWindow * 0.65),
+      ),
+    );
+    cropRight = Math.min(sourceRight, cropX + sourceWindow);
+    warnings.push(
+      "Szeroki kadr został przycięty wokół twarzy, aby pozostała widoczna.",
+    );
+  }
+  const scaledWidth = Math.max(1, Math.round((cropRight - cropX) * pos.scale));
+  const scaledHeight = Math.max(1, Math.ceil((cropBottom - cropY) * pos.scale));
+  const resized = await sharp(sourceVertical)
+    .extract({
+      left: cropX,
+      top: 0,
+      width: cropRight - cropX,
+      height: cropBottom - cropY,
+    })
+    .resize(scaledWidth, scaledHeight)
+    .png()
+    .toBuffer();
+  const outputTop = Math.round(pos.top + (cropY - bounds.y) * pos.scale);
+  const sy = Math.max(0, -outputTop),
+    dy = Math.max(0, outputTop);
+  const height = Math.min(scaledHeight - sy, OUTPUT.height - dy);
   const vertical = await sharp(resized)
-    .extract({ left: 0, top: sy, width: pos.width, height })
+    .extract({ left: 0, top: sy, width: scaledWidth, height })
     .png()
     .toBuffer();
   // Anchor the rightmost VISIBLE pixel, not a hand or elbow below the crop.
   const visibleBounds = await subjectBounds(vertical);
   const left = c.subjectRight - visibleBounds.x - visibleBounds.width;
-  if (left + visibleBounds.x < 0)
-    throw new AppError(
-      "SUBJECT_TOO_WIDE",
-      "Sylwetka jest zbyt szeroka dla wybranego udziału głowy. Zmniejsz wysokość głowy do 30% lub wybierz węższy kadr źródłowy.",
+  if (cropX > sourceVisible.x || left + visibleBounds.x < 0)
+    warnings.push(
+      "Szeroki kadr został przycięty po lewej stronie. Zmniejsz wielkość sylwetki, jeśli chcesz pokazać więcej zdjęcia.",
     );
   const sx = Math.max(0, -left),
     dx = Math.max(0, left);
-  const width = Math.min(pos.width - sx, OUTPUT.width - dx);
+  const width = Math.min(scaledWidth - sx, OUTPUT.width - dx);
   const filtered = await applyFilters(vertical, filters);
   const visible = await sharp(filtered)
     .extract({ left: sx, top: 0, width, height })
@@ -460,16 +491,6 @@ export async function compose(
     .png()
     .toBuffer();
   const actual = await subjectBounds(layer);
-  if (actual.y + actual.height !== c.targetBottom)
-    throw new AppError(
-      "SOURCE_GAP",
-      "W tym kadrze sylwetka nie sięga dolnej krawędzi. Sprawdź pomiar głowy lub wybierz inne zdjęcie.",
-    );
-  if (Math.abs(actual.y - c.headTop) > 1)
-    throw new AppError(
-      "HEAD_TOP_MISMATCH",
-      "Ustaw linię czubka włosów na najwyższym punkcie sylwetki. Jeśli nad głową są uniesione ręce lub przedmiot, wybierz inne zdjęcie portretowe.",
-    );
   const layout: LayoutMetrics = {
     headTop: c.headTop,
     subjectRight: actual.x + actual.width,

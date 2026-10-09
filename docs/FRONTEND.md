@@ -1,34 +1,24 @@
-# Frontend narzędzia do zdjęć prelegentów
+# Interfejs Impact'27
 
-Jeden ekran służy do wgrania jednej osoby, sprawdzenia wyciętej sylwetki, pomiaru głowy i pobrania PNG 1600 × 1200. Każdy plik ma stałą nazwę `Impact'27 photo.png`; formularz nie zbiera nazwiska. Canva pozostaje opcjonalna i jej kontrolki są ukryte bez konfiguracji.
+Na desktopie wybór pliku, generowanie, dwa suwaki, cały podgląd i pobieranie są widoczne na pierwszym ekranie przy 1280 × 720 oraz 1366 × 768. Nagłówek jest kompaktowy, podgląd dopasowuje rozmiar do wysokości okna, a dodatkowe ustawienia przewijają się w lewej kolumnie. Pobieranie znajduje się nad podglądem. Na telefonie kolejność to: wybór zdjęcia, podgląd, kadrowanie, opcje dodatkowe.
 
-## Wdrożona iteracja kadrowania
+[Podgląd na komputerze](INTERFEJS-IMPACT27.png) · [Podgląd na telefonie](INTERFEJS-IMPACT27-MOBILE.png). Przyciski generowania i pobierania są nieaktywne przed wybraniem zdjęcia.
 
-| Obszar        | Działanie                                                                                                                     |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Tło i zdjęcie | Podgląd stałego kwadratu gradientu na białym płótnie, wybór zdjęcia z automatycznym rozpoznaniem przezroczystej sylwetki      |
-| Kadrowanie    | Wysokość głowy 30–55%, domyślnie 45%, aktualizacja i reset; pozycja czubka, prawego skraju i dołu jest stała                  |
-| Pomiar głowy  | Wycięta sylwetka z liniami włosów i brody, korekta obu linii i przycisk zastosowania pomiaru                                  |
-| Filtry        | Cały wcześniejszy preset; opcjonalne delikatne odszumianie domyślnie wyłączone; zastosowanie i przywrócenie presetu           |
-| Podgląd       | Białe płótno z kwadratem i osobą, opcjonalne prowadnice, rzeczywisty udział głowy, ostrzeżenia oraz potwierdzenie poprawności |
-| Wynik         | PNG bez prowadnic, usunięcie zdjęcia z serwera                                                                                |
+| Element                            | Zachowanie                                                                                                                                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Przygotowanie zdjęcia na Impact'27 | Większy wybór pliku, pod nim miniatura tła i wymagania. Bez nazwiska, dodatkowego napisu „DODAJ ZDJĘCIE”, menu trybu i opisu gotowego gradientu.                                      |
+| GENERUJ GRAFIKĘ NA IMPACT'27       | Automatyczne usuwanie tła lub rozpoznanie gotowej przezroczystej sylwetki.                                                                                                            |
+| WIELKOŚĆ SYLWETKI                  | Proporcjonalne powiększenie. Wewnętrzny zakres 15–75, start 45; UI nie pokazuje procentów.                                                                                            |
+| WYSOKOŚĆ SYLWETKI                  | Czubek od y = 174 do y = 660, czyli 5–50% wysokości gradientu pod jego górną krawędzią. Wyższa wartość suwaka podnosi osobę.                                                          |
+| Kadrowanie                         | Automatyczna aktualizacja po zatrzymaniu suwaka, reset obu suwaków. Krótkie źródło jest dopasowane do dołu; powiększenie nie ucina całej głowy. Szeroki kadr można przycinać z lewej. |
+| Pomiar głowy i filtry              | Dodatkowe, zwinięte sekcje. Brak wykrytej twarzy uruchamia szacunkowe kadrowanie.                                                                                                     |
+| POBIERZ PNG                        | Pobieranie przez odpowiedź binarną i plik Blob. Stała nazwa `Impact'27 photo.png`, 1600 × 1200.                                                                                       |
+| Uwagi do zdjęcia                   | Rozwijane, informacyjne. Usunięto obowiązkową ocenę sylwetki i checkbox blokujący eksport.                                                                                            |
+| Dodatkowy obiekt                   | Komunikat przy podglądzie, zgoda lub odmowa zapisywana tylko dla tego zdjęcia. Bez retuszu i wysyłania fotografii. Pobranie pozostaje dostępne.                                       |
+| Prowadnice                         | Przycisk z `aria-pressed`; linie nie trafiają do PNG.                                                                                                                                 |
 
-Swobodne przesuwanie i zoom zostały zastąpione pomiarem głowy i wyborem jej udziału. Dzięki temu korekta nie zmienia zatwierdzonych kotwic. Zmiana ustawień blokuje pobranie do aktualizacji podglądu. Błąd pomiaru zachowuje ostatni prawidłowy wynik, ale interfejs prosi o poprawę nowych ustawień przed pobraniem.
+Suwaki mają etykiety i obsługę klawiatury. Aktualizacja podglądu blokuje pobranie tylko do zakończenia operacji. Błędny pomiar pozostawia ostatni prawidłowy podgląd, pokazuje błąd i nie jest powtarzany w pętli. Popraw suwak lub użyj resetu. Przy kilku osobach aplikacja prosi o osobne zdjęcie; nie wybiera automatycznie osoby.
 
-Automat ustala jedynie wstępny pomiar głowy. Przy braku wykrytej twarzy po potwierdzeniu jednej osoby wymagane jest ręczne ustawienie brody. Ciasny kadr może wyjątkowo dać do 65% głowy, z ostrzeżeniem i świadomym potwierdzeniem. Przy jeszcze ciaśniejszym lub zbyt szerokim źródle pojawia się konkretne wyjaśnienie i prośba o inne zdjęcie. Żaden komunikat nie sugeruje, że aplikacja dorobiła brakującą część osoby.
+KV wykorzystuje dostarczony gradient, białe sekcje, czerwone akcenty i przyciski z obwódką. Tekst używa lokalnego Raleway Light, a nagłówki i CTA — Barlow Condensed Bold jako zamiennika Champions Gothic. Zmiany UI nie zmieniają oryginalnego gradientu w eksporcie.
 
-Kontrolki mają etykiety i obsługę klawiatury; prowadnice nie wymagają przeciągania. Na telefonie podgląd i status są nad ustawieniami. Wszelkie zdjęcia i wyniki przechowywane są w pamięci maksymalnie 20 minut; restart usuwa zadania.
-
-[Zatwierdzona geometria i plan kalibracji](ITERACJA-KADROWANIA.md) opisują pomiary oraz ograniczenia automatu.
-
-## Następne usprawnienia
-
-Najpierw porównać wyniki na rzeczywistych zdjęciach o różnych pozach, dopracować wiarygodność pomiaru głowy i ocenić filtry. Potem uprościć pracę z pomiarem, np. dodać możliwość wskazania brody na zdjęciu przy zachowaniu suwaków dla klawiatury. Osobno można dodać przeciąganie pliku, licznik sesji, przycisk nowego zdjęcia oraz docelowe logo, font i styl kontrolek.
-
-## KV Impact'27
-
-Wygląd opiera się na dostarczonym screenie: gradientowy nagłówek, białe sekcje, czerwone panele dla generowania i pobierania oraz przyciski z białą obwódką. Tekst używa Raleway Light; H1, nagłówki sekcji i przyciski korzystają z wąskiego Barlow Condensed Bold jako zamiennika Champions Gothic. Fonty są dołączone lokalnie i mają licencje OFL.
-
-[Podgląd na komputerze](INTERFEJS-IMPACT27.png) · [Podgląd na telefonie](INTERFEJS-IMPACT27-MOBILE.png). Zrzuty pokazują ekran przed wybraniem zdjęcia, więc przyciski generowania i pobierania są nieaktywne.
-
-Sekcja 1 nosi nazwę **Przygotowanie zdjęcia na Impact'27**. Miniatura tła ma połowę poprzedniej szerokości i wysokości. Pole wyboru pliku ma etykietę **DODAJ ZDJĘCIE NA IMPACT'27** oraz większy przycisk. Formularz zawiera wymagania zdjęcia i CTA **GENERUJ GRAFIKĘ NA IMPACT'27**. Usunięto nazwisko i menu trybu przygotowania sylwetki. Zmiany stylu dotyczą narzędzia; grafika wynikowa zachowuje zatwierdzone tło i geometrię.
+[Geometria i ograniczenia](ITERACJA-KADROWANIA.md) · [Lokalne wykrywanie obiektów](OBIEKTY.md). Zdjęcia pozostają w pamięci przez maksymalnie 20 minut; restart usuwa zadania.

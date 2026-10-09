@@ -3,11 +3,11 @@ export const OUTPUT = { width: 1600, height: 1200 } as const;
 export const BACKGROUND_LAYOUT = { left: 0, top: 120, size: 1080 } as const;
 export const OUTPUT_FILENAME = "Impact'27 photo.png";
 export const HEAD_PROPORTIONS = {
-  min: 0.3,
+  min: 0.15,
   target: 0.45,
-  max: 0.55,
-  sourceLimit: 0.65,
+  max: 0.75,
 } as const;
+export const SUBJECT_TOP = { min: 174, max: 660 } as const;
 export const gradientModeSchema = z.enum(["canvas", "cutout"]);
 export type GradientMode = z.infer<typeof gradientModeSchema>;
 const slider = z.number().min(-100).max(100);
@@ -57,13 +57,13 @@ export const NEUTRAL_PRESET: Filters = Object.fromEntries(
 ) as Filters;
 export const compositionSchema = z
   .object({
-    headTop: z.literal(240),
+    headTop: z.number().min(SUBJECT_TOP.min).max(SUBJECT_TOP.max),
     subjectRight: z.literal(1224),
     targetBottom: z.literal(1200),
   })
   .strict();
 export type Composition = z.infer<typeof compositionSchema>;
-// Approved on 9 October 2026. Coordinates are fixed, including in API requests.
+// Gradient, right edge and bottom stay fixed; the subject top is adjustable.
 export const DEFAULT_COMPOSITION: Composition = {
   headTop: 240,
   subjectRight: 1224,
@@ -92,7 +92,18 @@ export const renderSchema = z
   .strict();
 export type RenderSettings = z.infer<typeof renderSchema>;
 export type Rect = { x: number; y: number; width: number; height: number };
-export type Analysis = { people: number; faces: Rect[]; warnings: string[] };
+export type DetectedObject = { label: string; confidence: number; box: Rect };
+export type Analysis = {
+  people: number;
+  faces: Rect[];
+  warnings: string[];
+  objects?: DetectedObject[];
+};
+export type ObjectReport = {
+  status: "complete" | "limited";
+  objects: DetectedObject[];
+  message?: string;
+};
 export type HeadMeasurement = {
   top: number;
   chin: number | null;
@@ -112,6 +123,7 @@ export type JobState =
   | "validating"
   | "removing-background"
   | "composing"
+  | "detecting-objects"
   | "creating-canva-design"
   | "exporting"
   | "complete"
@@ -131,6 +143,8 @@ export type JobView = {
   layout?: LayoutMetrics;
   filename: string;
   analysis?: Analysis;
+  objectReport?: ObjectReport;
+  objectDecision?: "pending" | "accepted" | "declined";
   expiresAt: number;
   revision: number;
 };

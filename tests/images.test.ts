@@ -164,30 +164,30 @@ describe("matting and composition", () => {
     );
     expect(short.headRatio).toBeCloseTo(0.36);
     expect(short.top + short.height).toBe(1200);
-    expect(() =>
+    expect(
       placement(
         { x: 90, y: 40, width: 320, height: 270 },
         head,
         DEFAULT_COMPOSITION,
         { ...DEFAULT_FRAMING, headRatio: 0.3 },
-      ),
-    ).toThrow(/65%/);
+      ).headRatio,
+    ).toBeGreaterThan(0.65);
   });
-  it("requires a chin measurement when no face was detected", async () => {
+  it("estimates framing when no face was detected", async () => {
     const head = await measureHead(await subjectFixture(), {
       people: 0,
       faces: [],
       warnings: [],
     });
     expect(head.chin).toBeNull();
-    expect(() =>
-      placement(
-        { x: 90, y: 40, width: 320, height: 640 },
-        head,
-        DEFAULT_COMPOSITION,
-        DEFAULT_FRAMING,
-      ),
-    ).toThrow(/brody/);
+    const fitted = placement(
+      { x: 90, y: 40, width: 320, height: 640 },
+      head,
+      DEFAULT_COMPOSITION,
+      DEFAULT_FRAMING,
+    );
+    expect(fitted.scale).toBeGreaterThan(0);
+    expect(fitted.top).toBe(240);
   });
   it("preserves alpha and produces lower saturation with the screenshot preset", async () => {
     const source = await subjectFixture();
@@ -247,16 +247,16 @@ describe("matting and composition", () => {
         { people: 1, faces: [face], warnings: [] },
       ),
     ).rejects.toMatchObject({ code: "HEAD_MEASUREMENT_TOO_SMALL" });
-    await expect(
-      compose(
-        await subjectFixture(),
-        await gradientFixture(),
-        DEFAULT_COMPOSITION,
-        { ...DEFAULT_FRAMING, headTop: 50, chin: 220 },
-        NEUTRAL_PRESET,
-        { people: 1, faces: [face], warnings: [] },
-      ),
-    ).rejects.toMatchObject({ code: "HEAD_TOP_MISMATCH" });
+    const out = await compose(
+      await subjectFixture(),
+      await gradientFixture(),
+      DEFAULT_COMPOSITION,
+      { ...DEFAULT_FRAMING, headTop: 50, chin: 220 },
+      NEUTRAL_PRESET,
+      { people: 1, faces: [face], warnings: [] },
+    );
+    expect(out.layout.headTop).toBe(240);
+    await validateExport(out.png);
   });
 });
 
@@ -403,7 +403,7 @@ describe("approved fixed composition", () => {
   });
 });
 
-it("accepts the full 10-point source tolerance and refuses a tighter crop", async () => {
+it("fits tight sources without the former 65% rejection", async () => {
   const source = await sharp(
     Buffer.from(
       '<svg width="500" height="500"><rect x="175" y="40" width="150" height="260" fill="#b89478"/><rect x="145" y="300" width="210" height="140" fill="#273b65"/></svg>',
@@ -424,17 +424,84 @@ it("accepts the full 10-point source tolerance and refuses a tighter crop", asyn
     },
   );
   expect(out.layout.headRatio).toBeCloseTo(0.65);
-  expect(out.warnings.join(" ")).toContain("tolerancję");
+  expect(out.warnings.join(" ")).toContain("Krótki kadr");
   const bounds = await subjectBounds(out.layer);
   expect([bounds.y, bounds.x + bounds.width, bounds.y + bounds.height]).toEqual(
     [240, 1224, 1200],
   );
-  expect(() =>
+  expect(
     placement(
       { x: 145, y: 40, width: 210, height: 399 },
       { top: 40, chin: 300, sourceWidth: 500, sourceHeight: 500 },
       DEFAULT_COMPOSITION,
       DEFAULT_FRAMING,
-    ),
-  ).toThrow(/65%/);
+    ).headRatio,
+  ).toBeGreaterThan(0.65);
 });
+
+it.each([174, 240, 660])(
+  "moves the subject to y=%i and retains the right edge, bottom and whole head",
+  async (top) => {
+    const out = await compose(
+      await subjectFixture(),
+      await gradientFixture(),
+      { ...DEFAULT_COMPOSITION, headTop: top },
+      { ...DEFAULT_FRAMING, headRatio: 0.75, headTop: 40, chin: 220 },
+      NEUTRAL_PRESET,
+      { people: 1, faces: [face], warnings: [] },
+    );
+    const bounds = await subjectBounds(out.layer);
+    expect(Math.abs(bounds.y - top)).toBeLessThanOrEqual(1);
+    expect(bounds.x + bounds.width).toBe(1224);
+    expect(bounds.y + bounds.height).toBe(1200);
+    expect(out.layout.headRatio).toBeLessThanOrEqual(1);
+    await validateExport(out.png);
+  },
+);
+
+it.each([
+  { width: 4000, height: 400 },
+  { width: 400, height: 4000 },
+])(
+  "fits a source with proportions $width × $height using only the visible window",
+  async ({ width, height }) => {
+    const source = await sharp(
+      Buffer.from(
+        `<svg width="${width}" height="${height}"><rect x="150" y="20" width="120" height="160" fill="#b89478"/><rect x="0" y="180" width="${width}" height="${height - 180}" fill="#273b65"/></svg>`,
+      ),
+    )
+      .png()
+      .toBuffer();
+    const out = await compose(
+      source,
+      await gradientFixture(),
+      DEFAULT_COMPOSITION,
+      { ...DEFAULT_FRAMING, headTop: 20, chin: 180 },
+      NEUTRAL_PRESET,
+      {
+        people: 1,
+        faces: [{ x: 150, y: 30, width: 120, height: 140 }],
+        warnings: [],
+      },
+    );
+    const bounds = await subjectBounds(out.layer);
+    expect(bounds.x + bounds.width).toBe(1224);
+    expect(bounds.y + bounds.height).toBe(1200);
+    await validateExport(out.png);
+    const headPixels = await sharp(out.layer)
+      .extract({ left: 0, top: 240, width: 1224, height: 300 })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    let skinPixels = 0;
+    for (let i = 0; i < headPixels.length; i += 4)
+      if (
+        headPixels[i] === 184 &&
+        headPixels[i + 1] === 148 &&
+        headPixels[i + 2] === 120 &&
+        headPixels[i + 3] > 12
+      )
+        skinPixels++;
+    expect(skinPixels).toBeGreaterThan(200);
+  },
+);

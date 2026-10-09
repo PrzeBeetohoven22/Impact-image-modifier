@@ -1,35 +1,18 @@
-# Stały układ zdjęć prelegentów — 9 października 2026
+# Kadrowanie — 9 października 2026
 
-Użytkownik zatwierdził poniższą geometrię dla PNG 1600 × 1200. Benchmarki 16:9 są odniesieniem do nakładania sylwetki na gradient; pozycje wynikają z doprecyzowanego opisu 4:3.
+PNG ma 1600 × 1200, białe tło i pełny oryginalny kwadrat gradientu 1080 × 1080 w punkcie (0, 120). Gradient pozostaje bez zmian. Prawy skraj widocznego wycięcia jest kotwiczony na x = 1224; sylwetka jest dopasowana do dolnej krawędzi y = 1200.
 
-| Element                                     | Stała zasada                                                                |
-| ------------------------------------------- | --------------------------------------------------------------------------- |
-| Płótno                                      | 1600 × 1200 px, białe, PNG sRGB bez przezroczystości                        |
-| Gradient                                    | Pełny oryginalny kwadrat; 1080 × 1080 px, x = 0, y = 120                    |
-| Lewa i dolna krawędź gradientu              | Dotykają odpowiednich krawędzi płótna                                       |
-| Biel nad gradientem                         | 120 px, czyli 10% wysokości                                                 |
-| Prawa krawędź gradientu                     | x = 1080; biel do x = 1600                                                  |
-| Czubek włosów                               | y = 240, czyli 20% wysokości płótna                                         |
-| Prawy skraj widocznej sylwetki              | x = 1224; wystaje o 144 px, czyli 9% szerokości całego płótna               |
-| Dół sylwetki                                | Dotyka y = 1200                                                             |
-| Wysokość widocznej sylwetki od czubka głowy | 960 px                                                                      |
-| Głowa, włosy–broda                          | Cel 432 px = 45% z 960; zwykle 30–55%, wyjątkowo do 65% przy ciasnym źródle |
-| Lewy skraj sylwetki                         | Wynika z oryginalnych proporcji zdjęcia i wybranego udziału głowy           |
+W tej iteracji użytkownik zastąpił stały poziom głowy dwoma swobodniejszymi suwakami:
 
-Efekt przestrzenny wynika z nakładania wyciętej sylwetki na kwadrat: część osoby jest na gradiencie, a jej prawy skraj na białym obszarze. Nie dodajemy cienia, zmiany oświetlenia, obrotu ani przebudowy postaci.
+- **WIELKOŚĆ SYLWETKI** zmienia skalę proporcjonalnie. Parametr wewnętrzny 15–75, start 45, określa wysokość głowy względem bazowych 960 px. Liczby i procenty są ukryte w UI. Suwak nie deformuje osoby.
+- **WYSOKOŚĆ SYLWETKI** przesuwa czubek od y = 174 do y = 660. To od 5% do 50% wysokości kwadratu poniżej jego górnej krawędzi. Wyższa wartość podnosi sylwetkę. Reset wraca do y = 240 i wielkości 45.
 
-## Wdrożenie
+Krótki kadr źródłowy jest powiększany do kontaktu z dołem; nie obowiązuje dawne odrzucanie przy głowie większej niż 65%. Przy bardzo dużym powiększeniu i niskim ustawieniu ograniczamy skalę tak, aby głowa mieściła się w dostępnym kadrze. Szerokie wycięcia są przycinane po lewej stronie. Nie dorabiamy tułowia ani nie zmieniamy rysów. Można przetwarzać wejścia pionowe, kwadratowe, poziome i długie zdjęcia całej postaci; pozostają limity pliku i jakości opisane w instrukcji.
 
-1. Oryginalny gradient pozostaje bez zmian w `reference_assets/impact-gradient-original.png`. Skrypt `npx tsx scripts/build-background.ts` skaluje cały kwadrat proporcjonalnie i umieszcza go na białym płótnie. Nie obcina ani nie filtruje jego wnętrza. Gotowe tło jest dołączone w `assets/`; odbudowanie aplikacji nie wymaga uruchomienia tego skryptu.
-2. Usuwanie tła nakłada wyłącznie maskę alfa modelu na oryginalne RGB zdjęcia. Dla istniejącego PNG zachowuje jego maskę. Żadna operacja nie generuje rysów, włosów, dłoni, ubrania ani brakującego fragmentu tułowia.
-3. Detektor twarzy i maska dostarczają wstępny pomiar głowy. Dolna krawędź wykrytej twarzy przybliża brodę; ten pomiar jest oznaczony jako szacunkowy i wymaga oceny człowieka. Na wyciętej sylwetce można poprawić linię włosów i brody. Ta wersja wymaga portretu, w którym włosy są najwyższym punktem sylwetki; ręce lub przedmioty nad głową wymagają innego źródła. Bez wykrytej twarzy trzeba wskazać brodę, zanim powstanie PNG.
-4. Jednolite skalowanie ustawia głowę na wybraną wysokość i czubek na y = 240. Dół dłuższego zdjęcia jest przycinany do płótna. Prawy skraj jest obliczany dla widocznego fragmentu maski, więc np. łokieć poniżej kadru nie przesuwa całego portretu.
-5. Jeśli źródło kończy się za wcześnie, skala rośnie tylko tyle, by osoba dotykała dołu. Interfejs podaje rzeczywisty udział głowy. Gdy przekracza 55%, dopuszczamy do 10 punktów procentowych tolerancji, wyłącznie gdy wymaga tego kadr źródła. Ostrzeżenie podaje rzeczywisty udział głowy i wymaga sprawdzenia. Powyżej 65% źródło jest odrzucane; nie dorabiamy tułowia. Przy zbyt szerokiej sylwetce prosimy o inne źródło. Poprzedni prawidłowy podgląd pozostaje dostępny po błędzie korekty.
-6. Zachowany jest cały wcześniejszy preset, w tym nasycenie −63. Opcjonalne delikatne odszumianie jest domyślnie wyłączone. Działa wyłącznie wewnątrz nieprzezroczystej maski i zachowuje jej krawędź oraz alfa. Filtry obejmują wyłącznie sylwetkę.
-7. Tło i kotwice układu są zablokowane w interfejsie i API. Prowadnice głowy, kwadratu i prawego skraju są opcjonalne i nie pojawiają się w eksporcie.
+Widoczny fragment jest wycinany w źródle przed powiększeniem. Dzięki temu bardzo szerokie lub wysokie zdjęcie nie wymaga tworzenia ogromnej bitmapy, która później byłaby odrzucona. Gdy zakotwiczenie szerokiego wycięcia ukryłoby twarz, okno źródłowe jest kadrowane wokół niej. Skalowanie pozostaje proporcjonalne, z zaokrągleniem do pikseli. Prawy skraj jest wyznaczany po pionowym kadrowaniu, więc obiekt lub łokieć pod kadrem nie przesuwa portretu.
 
-## Sprawdzenie wyników i dalsza iteracja
+Usuwanie tła nakłada wyłącznie alfa modelu na źródłowe RGB. Cały wcześniejszy preset filtrów, w tym nasycenie −63, pozostaje bez zmian. Dodatkowe łagodne odszumianie domyślnie jest wyłączone. Nie używamy generowania ani retuszu osoby.
 
-Testy automatyczne obejmują pełny oryginalny gradient, białe marginesy, pozycje skrajów maski, udział głowy 30/45/55%, granicę tolerancji 65%, krótkie i długie źródła, szeroki fragment poza dolnym kadrem, zachowanie źródłowych RGB i alfa oraz eksport w przeglądarce. Kontrolowane sylwetki testowe nie potwierdzają jakości wycięcia rzeczywistych włosów ani dokładności detekcji brody.
+Detektor twarzy i maska dają szacunkowy pomiar włosów oraz brody. Bez twarzy używamy przybliżenia z wysokości wycięcia; można poprawić linie w rozwijanej sekcji. Przy uniesionych rękach lub przedmiotach nad głową automat może wymagać korekty pomiaru. Mikrofon lub laptop pozostawiony w masce może wpływać na granice wycięcia — lokalna detekcja go sygnalizuje, ale ta iteracja nie usuwa go ze zdjęcia.
 
-Kolejny etap kalibracji to ocena wyników na kilku rzeczywistych zdjęciach: portret na wprost, pozycja siedząca, szerokie ramiona i zdjęcie z większą częścią tułowia. Dla każdego porównujemy rzeczywisty czubek włosów, brodę, maskę, 30–55% głowy (wyjątkowo do 65%) oraz kontakt z dołem. Korygujemy pomiar i maskę, zachowując zatwierdzoną geometrię. Jeśli automat często myli brodę, dalszą poprawą może być detektor punktów twarzy; służyłby wyłącznie do pomiarów. Odtworzenie wyglądu Canva wymaga osobnej kalibracji filtrów na identycznym źródle; obecne wartości pozostają lokalnym przybliżeniem.
+Ostrzeżenia o jakości nie blokują PNG. Błędny pomiar poza zdjęciem jest odrzucany; poprzedni wynik pozostaje dostępny, a nowe ustawienia trzeba poprawić przed pobraniem. Testy obejmują poziomy 174/240/660, wielkość 75, bardzo szerokie i wysokie źródła, ciasne kadry, zachowanie RGB/alfa, niezmienne tło oraz prawdziwe pobranie pliku w Chromium. Syntetyczne maski nie potwierdzają jakości włosów ani dokładności brody na rzeczywistych zdjęciach.

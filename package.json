@@ -14,10 +14,13 @@
     "lint": "eslint .",
     "test": "vitest run",
     "check:models": "tsx scripts/check-models.ts",
+    "setup:objects": "tsx scripts/setup-objects.ts",
+    "check:objects": "tsx scripts/check-objects.ts",
     "canva:poc": "tsx scripts/canva-poc.ts",
     "test:browser": "playwright test"
   },
   "dependencies": {
+    "@huggingface/transformers": "3.8.1",
     "@imgly/background-removal-node": "1.4.5",
     "@tensorflow/tfjs-backend-wasm": "4.22.0",
     "@tensorflow/tfjs-converter": "4.22.0",

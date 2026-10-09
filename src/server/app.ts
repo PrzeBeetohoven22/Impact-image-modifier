@@ -35,9 +35,14 @@ import {
   type SubjectAnalysisProvider,
 } from "./providers.js";
 import { CanvaService, type CanvaSettings, type Tokens } from "./canva.js";
+import {
+  LocalObjectDetection,
+  type ObjectDetectionProvider,
+} from "./objects.js";
 export type AppOptions = {
   analysis?: SubjectAnalysisProvider;
   background?: BackgroundRemovalProvider;
+  objects?: ObjectDetectionProvider;
   canva?: CanvaSettings;
   modelBase?: string;
   sessionKey?: string;
@@ -103,6 +108,7 @@ export function createApp(options: AppOptions = {}) {
     );
   const background = options.background ?? new LocalBackgroundRemoval(),
     transparent = new TransparentPngProvider();
+  const objects = options.objects ?? new LocalObjectDetection();
   const ttl = 20 * 60 * 1000;
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -247,10 +253,7 @@ export function createApp(options: AppOptions = {}) {
     j.view.layout = r.layout;
     j.view.error = undefined;
     j.view.warnings = [...j.analysis.warnings, ...r.warnings];
-    j.view.state =
-      j.view.warnings.length && !j.reviewed
-        ? "manual-review-required"
-        : "complete";
+    j.view.state = "complete";
     j.view.canvaDesign = undefined;
     j.view.canvaError = undefined;
     j.view.canvaState = "unconfigured";
@@ -265,18 +268,12 @@ export function createApp(options: AppOptions = {}) {
         j.view.analysis = j.analysis;
       }
       if (j.cancelled) return;
-      if (
-        (j.analysis.people !== 1 || j.analysis.faces.length !== 1) &&
-        !j.reviewed
-      ) {
-        j.view.state = "manual-review-required";
+      if (j.analysis.people > 1) {
+        j.view.state = "failed";
         j.view.error = {
-          code:
-            j.analysis.people > 1 ? "MULTIPLE_PEOPLE" : "NO_PERSON_CONFIRMED",
+          code: "MULTIPLE_PEOPLE",
           message:
-            j.analysis.people > 1
-              ? "Wykryto kilka osób. Wgraj zdjęcie z jednym prelegentem lub wykadruj je przed wysłaniem."
-              : "Nie potwierdzono jednej osoby i jednej twarzy. Sprawdź źródło przed kontynuowaniem.",
+            "Wykryto kilka osób. Wgraj zdjęcie z jednym prelegentem lub wykadruj je przed wysłaniem.",
         };
         return;
       }
@@ -287,6 +284,13 @@ export function createApp(options: AppOptions = {}) {
       j.view.hasSubject = true;
       j.view.head = await measureHead(j.subject, j.analysis);
       j.source = undefined;
+      if (j.cancelled) return;
+      j.view.state = "detecting-objects";
+      j.view.objectReport = await objects.detect(
+        j.subject,
+        j.analysis.objects ?? [],
+      );
+      j.view.objectDecision = "pending";
       if (j.cancelled) return;
       j.view.error = undefined;
       await render(j);
@@ -403,6 +407,15 @@ export function createApp(options: AppOptions = {}) {
     res.status(202).json(j.view);
   });
   app.get("/api/jobs/:id", (req, res) => res.json(job(req, res).view));
+  app.post("/api/jobs/:id/object-decision", (req, res) => {
+    const j = job(req, res);
+    const decision = z.enum(["accepted", "declined"]).parse(req.body.decision);
+    if (!j.view.objectReport?.objects.length)
+      throw new AppError("NO_OBJECT", "Nie wskazano obiektu do retuszu.", 409);
+    j.view.objectDecision = decision;
+    // This iteration records the answer only. It never edits or transmits a photo.
+    res.json(j.view);
+  });
   app.get("/api/jobs/:id/subject", (req, res) => {
     const j = job(req, res);
     if (!j.subject)

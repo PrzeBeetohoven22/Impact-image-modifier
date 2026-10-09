@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import request from "supertest";
-import { createApp } from "../src/server/app";
+import { createApp as buildApp, type AppOptions } from "../src/server/app";
 import {
   DEFAULT_FRAMING,
   DEFAULT_COMPOSITION,
@@ -8,6 +8,12 @@ import {
 } from "../src/shared/config";
 import { face, gradientFixture, subjectFixture } from "./fixtures";
 import { validateExport } from "../src/server/images";
+function createApp(options: AppOptions = {}) {
+  return buildApp({
+    objects: { detect: async () => ({ status: "complete", objects: [] }) },
+    ...options,
+  });
+}
 const instances: ReturnType<typeof createApp>[] = [];
 afterEach(() => {
   for (const i of instances) i.close();
@@ -129,7 +135,7 @@ describe("HTTP speaker workflow", () => {
     const { client } = setup();
     const id = await upload(client);
     const j = await ready(client, id);
-    expect(j.state).toBe("manual-review-required");
+    expect(j.state).toBe("complete");
     expect(j.warnings.join(" ")).toContain("powiększenia");
     await client
       .post(`/api/jobs/${id}/review`)
@@ -180,7 +186,7 @@ describe("HTTP speaker workflow", () => {
     const { client } = setup(2),
       id = await upload(client);
     const j = await ready(client, id);
-    expect(j.state).toBe("manual-review-required");
+    expect(j.state).toBe("failed");
     expect(j.error.code).toBe("MULTIPLE_PEOPLE");
     expect(j.hasPreview).toBe(false);
     await client.get(`/api/jobs/${id}/download`).expect(409);
@@ -189,25 +195,14 @@ describe("HTTP speaker workflow", () => {
       .send({ confirmSinglePerson: true })
       .expect(400);
   });
-  it("requires explicit review when no person is confidently detected", async () => {
+  it("provides a downloadable fallback when no face is detected", async () => {
     const { client } = setup(0),
       id = await upload(client);
-    expect((await ready(client, id)).state).toBe("manual-review-required");
-    await client
-      .post(`/api/jobs/${id}/review`)
-      .send({ confirmSinglePerson: false })
-      .expect(400);
-    await client
-      .post(`/api/jobs/${id}/review`)
-      .send({ confirmSinglePerson: true })
-      .expect(202);
-    const measured = await ready(client, id);
-    expect(measured.error.code).toBe("HEAD_MEASUREMENT_REQUIRED");
-    await client.get(`/api/jobs/${id}/download`).expect(409);
-    await client
-      .post(`/api/jobs/${id}/review`)
-      .send({ confirmSinglePerson: true })
-      .expect(409);
+    const view = await ready(client, id);
+    expect(view.state).toBe("complete");
+    expect(view.head.chin).toBeNull();
+    expect(view.hasPreview).toBe(true);
+    await client.get(`/api/jobs/${id}/download`).expect(200);
     await client
       .post(`/api/jobs/${id}/render`)
       .send({
@@ -216,11 +211,6 @@ describe("HTTP speaker workflow", () => {
         filters: IMPACT_PRESET,
       })
       .expect(200);
-    await client
-      .post(`/api/jobs/${id}/review`)
-      .send({ confirmSinglePerson: true })
-      .expect(200);
-    expect((await ready(client, id)).state).toBe("complete");
   });
   it("keeps images private to their uploading session", async () => {
     const { client, i } = setup(),
@@ -309,7 +299,7 @@ it("uses the supplied default gradient for a speaker without a background upload
     .expect(202);
   const id = created.body.id;
   const view = await ready(client, id);
-  expect(view.state).toBe("manual-review-required");
+  expect(view.state).toBe("complete");
   await client
     .post(`/api/jobs/${id}/review`)
     .send({ confirmSinglePerson: true })
@@ -402,9 +392,64 @@ it("needs only the photo, uses a fixed filename and automatically preserves an e
   await client
     .post(`/api/jobs/${cutout.body.id}/render`)
     .send({
-      framing: { ...DEFAULT_FRAMING, headRatio: 0.65 },
+      framing: { ...DEFAULT_FRAMING, headRatio: 0.76 },
       filters: IMPACT_PRESET,
       composition: DEFAULT_COMPOSITION,
     })
     .expect(400);
+});
+
+it("downloads despite warnings and an undecided object notice; consent never edits the image", async () => {
+  const i = createApp({
+    defaultGradient: await gradientFixture(),
+    analysis: {
+      analyze: async () => ({
+        people: 1,
+        faces: [face],
+        warnings: ["Test quality warning"],
+      }),
+    },
+    objects: {
+      detect: async () => ({
+        status: "complete",
+        objects: [
+          {
+            label: "mikrofon",
+            confidence: 0.8,
+            box: { x: 300, y: 400, width: 80, height: 150 },
+          },
+        ],
+      }),
+    },
+  });
+  instances.push(i);
+  const client = request.agent(i.app);
+  const photo = await client
+    .post("/api/jobs")
+    .attach("photo", await subjectFixture(), {
+      filename: "photo.png",
+      contentType: "image/png",
+    })
+    .expect(202);
+  const view = await ready(client, photo.body.id);
+  expect(view.state).toBe("complete");
+  expect(view.objectReport.objects[0].label).toBe("mikrofon");
+  expect(view.objectDecision).toBe("pending");
+  const before = await client.get(`/api/jobs/${view.id}/download`).expect(200);
+  const accepted = await client
+    .post(`/api/jobs/${view.id}/object-decision`)
+    .send({ decision: "accepted" })
+    .expect(200);
+  expect(accepted.body.objectDecision).toBe("accepted");
+  const after = await client.get(`/api/jobs/${view.id}/download`).expect(200);
+  expect(after.body.equals(before.body)).toBe(true);
+  const declined = await client
+    .post(`/api/jobs/${view.id}/object-decision`)
+    .send({ decision: "declined" })
+    .expect(200);
+  expect(declined.body.objectDecision).toBe("declined");
+  await request(i.app)
+    .post(`/api/jobs/${view.id}/object-decision`)
+    .send({ decision: "accepted" })
+    .expect(404);
 });

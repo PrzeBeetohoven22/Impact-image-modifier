@@ -148,14 +148,14 @@ README.md
       <section class="step" id="zdjecie">
         <p class="step-title"><span class="number">6</span> Przygotuj pierwsze zdjęcie</p>
         <ol>
-          <li>W polu <strong>DODAJ ZDJĘCIE NA IMPACT'27</strong> wybierz JPEG, PNG lub WebP z jedną osobą. Plik może mieć maksymalnie 20 MB; krótszy bok powinien mieć co najmniej 300 pikseli.</li>
-          <li>Kliknij <strong>GENERUJ GRAFIKĘ NA IMPACT'27</strong>. Gradient jest już gotowy. Tło zostanie usunięte automatycznie; PNG z wyciętą sylwetką jest rozpoznawany bez wyboru trybu.</li>
-          <li>Poczekaj na wynik. Jeśli aplikacja prosi o sprawdzenie zdjęcia, obejrzyj je i potwierdź jedną osobę. Przy kilku osobach wybierz inne zdjęcie.</li>
-          <li>Sprawdź <strong>Pomiar głowy: włosy–broda</strong>. Jeśli linie nie pasują, ustaw je na wyciętej sylwetce i kliknij <strong>Zastosuj pomiar głowy</strong>. Przy braku wykrytej twarzy pomiar jest obowiązkowy. Docelowa wysokość głowy wynosi 45% widocznej sylwetki; możesz wybrać 30–55% i kliknąć <strong>Aktualizuj podgląd</strong>.</li>
-          <li>Jeśli chcesz, rozwiń <strong>Filtry sylwetki</strong>, zmień wartości i kliknij <strong>Zastosuj filtry</strong>.</li>
-          <li>Po sprawdzeniu wyniku kliknij <strong>Pobierz PNG</strong>. Gotowy plik <strong>Impact'27 photo.png</strong> ma 1600 × 1200 pikseli i zawiera sylwetkę połączoną z Twoim gradientem.</li>
+          <li>Kliknij <strong>Wybierz plik</strong> w sekcji przygotowania zdjęcia. Wybierz JPEG, PNG lub WebP z jedną osobą. Zdjęcie może być pionowe, poziome lub kwadratowe; limit to 20 MB i minimum 300 pikseli na krótszym boku.</li>
+          <li>Kliknij <strong>GENERUJ GRAFIKĘ NA IMPACT'27</strong>. Tło zostanie usunięte automatycznie; istniejąca przezroczysta sylwetka jest rozpoznawana bez wyboru trybu.</li>
+          <li>Poczekaj na wynik. Przy kilku osobach wybierz osobne zdjęcie prelegenta. Ostrzeżenia o jakości nie wymagają zaznaczania checkboxa.</li>
+          <li>Ustaw suwaki <strong>WIELKOŚĆ SYLWETKI</strong> i <strong>WYSOKOŚĆ SYLWETKI</strong>. Podgląd aktualizuje się automatycznie. Pierwszy zmienia powiększenie, drugi przesuwa sylwetkę w pionie. Przycisk <strong>Resetuj kadr</strong> przywraca ustawienia początkowe.</li>
+          <li>Opcjonalnie rozwiń <strong>Pomiar głowy: włosy–broda</strong> lub <strong>Filtry sylwetki</strong>. Brak wykrytej twarzy nie blokuje pobrania; pomiar możesz poprawić ręcznie.</li>
+          <li>Kliknij <strong>POBIERZ PNG</strong> nad podglądem. Plik <strong>Impact'27 photo.png</strong> ma 1600 × 1200 pikseli. Przy komunikacie o wykrytym obiekcie możesz zapisać zgodę lub wybrać bez retuszu. Retusz nie jest wykonywany w tej wersji; odpowiedź nie blokuje pobierania.</li>
         </ol>
-        <p class="caption">Pobierz wynik podczas tej sesji. Zdjęcia i zadania są przechowywane w pamięci maksymalnie 20 minut; restart aplikacji również je usuwa. Tło i pozycje sylwetki są stałe. Prowadnice nie trafiają do pobranego PNG. Automatyczny pomiar głowy i jakość maski trzeba sprawdzić na zdjęciu. Ciasne źródło może dać głowę do 65% sylwetki, z ostrzeżeniem. Powyżej tego limitu wybierz inne zdjęcie.</p>
+        <p class="caption">Zdjęcia i zadania pozostają w pamięci maksymalnie 20 minut; restart również je usuwa. Gradient jest stały, a pozycję sylwetki możesz zmieniać suwakiem. Ciasne i szerokie kadry są dopasowywane bez dorabiania postaci. Prowadnice włączasz przyciskiem; nie trafiają do PNG. Dodatkowy model mikrofonów instalator pobiera raz. Jeżeli pobranie się nie uda, aplikacja działa z podstawową detekcją; w terminalu ponów <code>npm run setup:objects</code>, a potem uruchom aplikację ponownie.</p>
       </section>
 
       <section class="step" id="stop">
@@ -180,7 +180,7 @@ README.md
             <tr><td>„Najpierw wykonaj…” albo brak folderu <code>dist</code></td><td>W terminalu wykonaj <code>bash .devcontainer/setup.sh</code>. Po zakończeniu ponownie uruchom komendę z kroku 4.</td></tr>
             <tr><td>Błąd „Wymagany Node.js 24”</td><td>Sprawdź pliki <code>.devcontainer</code>. Po ich uzupełnieniu otwórz paletę poleceń przez <strong>F1</strong> i wybierz <strong>Codespaces: Rebuild Container</strong>.</td></tr>
             <tr><td>Port 3001 nie otwiera strony</td><td>Sprawdź komunikat uruchomienia w terminalu. W panelu Ports protokół powinien być <strong>HTTP</strong>; zewnętrzny URL GitHub i tak używa HTTPS. Otwórz stronę ponownie przez ikonę globusa.</td></tr>
-            <tr><td>„Żądanie z niedozwolonej strony”</td><td>Otwórz adres z Ports dla portu 3001. W terminalu aplikacji naciśnij <strong>Control + C</strong>, a potem wykonaj <code>git pull --ff-only origin main &amp;&amp; npm run build &amp;&amp; bash .devcontainer/start.sh</code>. Po uruchomieniu odśwież kartę aplikacji i ponownie wybierz zdjęcie. Jeśli Git zgłosi konflikt, zatrzymaj się i podaj komunikat.</td></tr>
+            <tr><td>„Żądanie z niedozwolonej strony”</td><td>Otwórz adres z Ports dla portu 3001. W terminalu aplikacji naciśnij <strong>Control + C</strong>, a potem wykonaj <code>git pull --ff-only origin main &amp;&amp; bash .devcontainer/setup.sh &amp;&amp; bash .devcontainer/start.sh</code>. Po uruchomieniu odśwież kartę aplikacji i ponownie wybierz zdjęcie. Jeśli Git zgłosi konflikt, zatrzymaj się i podaj komunikat.</td></tr>
             <tr><td>„Address already in use” / <code>EADDRINUSE</code></td><td>Aplikacja prawdopodobnie już działa. Otwórz port 3001. Jeśli trzeba ją zrestartować, użyj Ctrl + C w terminalu, w którym ją uruchomiono.</td></tr>
             <tr><td>Podgląd zniknął lub zadanie wygasło</td><td>Wgraj zdjęcie ponownie. Wynik nie jest przechowywany jako historia.</td></tr>
           </tbody>

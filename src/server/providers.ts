@@ -165,6 +165,18 @@ export class LocalSubjectAnalysis implements SubjectAnalysisProvider {
       return {
         people,
         faces,
+        objects: result.object
+          .filter((o) => o.label !== "person" && o.score >= 0.5)
+          .map((o) => ({
+            label: o.label,
+            confidence: o.score,
+            box: {
+              x: o.box[0] * sx,
+              y: o.box[1] * sy,
+              width: o.box[2] * sx,
+              height: o.box[3] * sy,
+            },
+          })),
         warnings:
           faces.length === 0
             ? [
