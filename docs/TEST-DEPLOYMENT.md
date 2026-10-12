@@ -1,5 +1,7 @@
 # Uruchomienie pod adresem do testów
 
+Przed produkcyjnym udostępnieniem wykorzystaj [README produkcji — prywatność i wdrożenie](README-PRODUKCJA.md): opisuje faktyczny przepływ danych, retencję, brakujące decyzje administratora i warunki przyjęcia wdrożenia. Propozycje hostingu w tym dokumencie pozostają propozycjami.
+
 Kod aplikacji, konfiguracja Codespaces i instrukcje są częścią repozytorium. Osobny, stale działający serwer nie został jeszcze wdrożony. Zapisanie i publikacja konfiguracji środowiska Codex nie tworzą adresu WWW aplikacji.
 
 Do pierwszych prywatnych testów bez osobnego hostingu użyj [instrukcji GitHub Codespaces](PIERWSZE-URUCHOMIENIE.html). Dalsza część tego dokumentu opisuje osobne wdrożenie na serwerze, gdy będzie potrzebny stale dostępny URL.
@@ -21,14 +23,14 @@ Do pierwszych prywatnych testów bez osobnego hostingu użyj [instrukcji GitHub 
 | --- | --- |
 | Typ usługi | Web Service z procesem Node.js, jedna instancja |
 | Wersja Node | 24; projekt zawiera `.nvmrc` i `engines` |
-| Instalacja i build | `npm_config_onnxruntime_node_install_cuda=skip npm ci --include=dev && npm run build` |
+| Instalacja i build | `npm_config_onnxruntime_node_install_cuda=skip npm ci --include=dev && npm run setup:objects && npm run build` |
 | Start | `npm start` |
 | `HOST` | `0.0.0.0` |
 | `PORT` | Port przekazany przez hosting; aplikacja odczytuje tę zmienną |
 | `APP_ORIGIN` | Faktyczny origin, np. `https://<przydzielony-host>`, bez końcowego `/` |
 | Zmienne Canva | Nie są wymagane; pozostawić nieuzupełnione |
 | Automatyczna kontrola dostępności | Ścieżka `/`; obecny `/api/health` tworzy sesję, więc nie używać go do częstych prób hostingu |
-| Pamięć | Orientacyjny punkt startowy: 4 GB RAM; potwierdzić zużycie i czas na docelowych zdjęciach |
+| Zasoby | Punkt startowy zgodny z Codespaces: 2 vCPU / 8 GB RAM; potwierdzić obciążeniem na docelowych zdjęciach |
 
 Instalacja wymaga dostępu do rejestru npm. Modele po instalacji są lokalne; przetwarzanie zdjęć nie wymaga GPU ani zewnętrznego API. Nie pomijać zależności developerskich przed buildem, ponieważ zawierają TypeScript i Vite. Serwer potrzebuje również plików modeli z `node_modules` oraz gradientu z `assets/`; sam katalog `dist/` nie wystarczy.
 
@@ -36,7 +38,7 @@ Adres w tabeli jest przykładem składni, nie działającym URL. Usługa ma serw
 
 **Co oznacza to dla testów**
 
-Zdjęcia i zadania są przechowywane w pamięci przez maksymalnie 20 minut. Restart, nowe wdrożenie lub zatrzymanie usługi usuwa bieżące zadania i połączenie sesji z Canva. Do pierwszego testu nie potrzeba bazy danych, ale wynik trzeba pobrać przed wygaśnięciem sesji. Rozbudowanie narzędzia o historię albo wiele instancji będzie wymagało innego sposobu przechowywania danych.
+Zadania wygasają po 20 minutach od utworzenia; wygasłe wpisy są usuwane z pamięci sesji co 30 sekund. Rozpoczęta operacja modelu może jeszcze potrwać do jej zakończenia lub timeoutu. Restart, nowe wdrożenie lub zatrzymanie usługi usuwa bieżące zadania i lokalne połączenie sesji z Canva; nie usuwa zdalnych plików Canva. Do pierwszego testu nie potrzeba bazy danych, ale wynik trzeba pobrać przed wygaśnięciem zadania. Rozbudowanie narzędzia o historię albo wiele instancji wymaga zaprojektowania przechowywania i routingu sesji. Szczegóły retencji przeglądarki i infrastruktury opisuje README produkcji.
 
 Lokalne testy nie zastępują próby na hostingu: po wdrożeniu trzeba sprawdzić HTTPS, cookie sesji, upload, modele, pamięć i pobieranie pliku. Wartości filtrów pochodzą z dostarczonych suwaków; zgodność wyglądu z Canva i docelowe ustawienie głowy nadal wymagają zatwierdzonego przykładu.
 

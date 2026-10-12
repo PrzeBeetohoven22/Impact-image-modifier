@@ -1,5 +1,7 @@
 # Impact image modifier
 
+**Dokument dla właściciela, prawnika i zespołu wdrożeniowego:** [README produkcji — prywatność, regulamin i założenia wdrożenia](docs/README-PRODUKCJA.md). Zawiera inwentaryzację danych, rzeczywiste zasady retencji, opis cookies, dostawców, istniejące zabezpieczenia oraz decyzje do uzupełnienia przed produkcją.
+
 Działająca aplikacja robocza do przygotowania zdjęcia jednego prelegenta: walidacja → wykrycie osób i twarzy → lokalne usunięcie tła → filtry sylwetki → korekta kadru → PNG **1600 × 1200, sRGB, bez przezroczystości**. Opcjonalna integracja Canva Connect tworzy projekt z szablonu marki i pobiera zweryfikowany eksport. Interfejs używa KV Impact'27: Raleway Light, wąskich nagłówków oraz czerwieni i gradientu marki.
 
 Domyślna wersja do testów działa samodzielnie, bez konta, szablonu i kluczy Canva. Aplikacja sama łączy sylwetkę z wybranym gradientem i zapisuje wynik. Frontend korzysta z lokalnego eksportu PNG; opcjonalne API Canva pozostaje oddzielną integracją.
@@ -63,7 +65,7 @@ Cloud task jest już izolowany. Używaj istniejącego checkoutu; nie twórz work
 [Wykrywanie obiektów](docs/OBIEKTY.md) opisuje dodatkowy model, instalację i ograniczenia detekcji.
 [Zasady i plan tej iteracji](docs/ITERACJA-KADROWANIA.md) opisują geometrię i dalsze porównania na prawdziwych zdjęciach. Canva pozostaje opcjonalna; jej szablon powinien mieć ten sam stały układ.
 
-Po udanej segmentacji źródło jest zwalniane z pamięci. Sylwetka, tło i wynik pozostają tylko w sesji procesu przez maksymalnie 20 minut; możesz usunąć je wcześniej przyciskiem. Nie zapisujemy zdjęć na dysku. Cookie sesji jest podpisane, HttpOnly i SameSite. Połączenie Canva świadomie zapisuje asset i design na zdalnym koncie; ich retencja podlega Canva i nie jest objęta lokalnym usuwaniem.
+Po przygotowaniu sylwetki i pomiaru głowy referencja do źródła roboczego jest zwalniana. Zadanie wygasa 20 minut od utworzenia, a wygasłe wpisy są usuwane z sesji co 30 sekund. Możesz wcześniej usunąć zadanie przyciskiem; rozpoczęte obliczenie modelu może jeszcze potrwać do zakończenia lub timeoutu. Zwalnianie pamięci nie oznacza natychmiastowego wyzerowania RAM. Standardowy przepływ aplikacji nie zapisuje zdjęć na dysku; osobno trzeba ustalić zachowanie infrastruktury i skryptów diagnostycznych. Cookie sesji jest podpisane, HttpOnly i SameSite. Canva, jeśli zostanie skonfigurowana i wywołana, zapisuje asset i design na zdalnym koncie; ich retencja nie jest objęta lokalnym usuwaniem. [Pełne zasady retencji i przepływu danych](docs/README-PRODUKCJA.md).
 
 ## Architektura i konfiguracja
 
