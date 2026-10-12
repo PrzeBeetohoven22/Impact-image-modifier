@@ -1,6 +1,6 @@
 # Impact image modifier
 
-**Dokument dla właściciela, prawnika i zespołu wdrożeniowego:** [README produkcji — prywatność, regulamin i założenia wdrożenia](docs/README-PRODUKCJA.md). Zawiera inwentaryzację danych, rzeczywiste zasady retencji, opis cookies, dostawców, istniejące zabezpieczenia oraz decyzje do uzupełnienia przed produkcją.
+**Dokument dla właściciela, prawnika i zespołu wdrożeniowego:** [README produkcji — prywatność, regulamin i założenia wdrożenia](docs/README-PRODUKCJA.md) · [wersja PDF](docs/README-PRODUKCJA.pdf). Zawiera inwentaryzację danych, rzeczywiste zasady retencji, opis cookies, dostawców, istniejące zabezpieczenia oraz decyzje do uzupełnienia przed produkcją.
 
 Działająca aplikacja robocza do przygotowania zdjęcia jednego prelegenta: walidacja → wykrycie osób i twarzy → lokalne usunięcie tła → filtry sylwetki → korekta kadru → PNG **1600 × 1200, sRGB, bez przezroczystości**. Opcjonalna integracja Canva Connect tworzy projekt z szablonu marki i pobiera zweryfikowany eksport. Interfejs używa KV Impact'27: Raleway Light, wąskich nagłówków oraz czerwieni i gradientu marki.
 
